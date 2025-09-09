@@ -1,0 +1,10 @@
+name = "lean_scout"
+version = "0.1.0"
+defaultTargets = ["lean_scout"]
+
+[[lean_lib]]
+name = "LeanScout"
+
+[[lean_exe]]
+name = "lean_scout"
+root = "Main"
