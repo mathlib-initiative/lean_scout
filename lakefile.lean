@@ -3,7 +3,10 @@ import Lake
 open Lake DSL
 open System
 
-package lean_scout
+package lean_scout where
+  leanOptions := #[
+    ⟨`experimental.module, true⟩
+  ]
 
 @[default_target]
 lean_lib LeanScout
