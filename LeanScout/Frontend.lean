@@ -4,7 +4,7 @@ public import LeanScout.Target
 
 public section
 
-namespace Scout
+namespace LeanScout
 namespace Target
 
 open Lean Elab Frontend
@@ -44,4 +44,4 @@ def withEnv (tgt : Target) (go : Environment → IO α) : IO α :=
 
 end Target
 
-end Scout
+end LeanScout

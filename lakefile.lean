@@ -20,10 +20,11 @@ library_facet data (lib) : Array FilePath := pure <$> do
   let modules ← (← lib.modules.fetch).await
   let dataDir := (← getRootPackage).buildDir / "data"
   modules.mapM fun module => do
-    let path : FilePath := dataDir / toString module
-    buildFileUnlessUpToDate' path do
+    let moduleSrcFile := module.filePath module.pkg.rootDir "lean"
+    let moduleDataFile := module.filePath dataDir "data"
+    buildFileUnlessUpToDate' moduleDataFile do
       proc {
         cmd := scoutExe.toString
-        args := #[dataDir.toString, path.toString, toString module]
+        args := #[moduleSrcFile.toString, moduleDataFile.toString]
       }
-    return path
+    return moduleDataFile

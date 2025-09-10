@@ -4,7 +4,7 @@ public import Lean
 
 public section
 
-namespace Scout
+namespace LeanScout
 
 open Lean Elab Frontend
 
@@ -40,4 +40,4 @@ def read
 
 end Target
 
-end Scout
+end LeanScout
