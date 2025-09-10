@@ -3,15 +3,15 @@ module
 public import LeanScout
 
 def tacFilter : Lean.SyntaxNodeKinds := [
-  `«;»,
-  `Lean.cdotTk,
-  `«]»,
-  Lean.nullKind,
-  `«by»,
-  `Lean.Parser.Tactic.withAnnotateState,
+  `Lean.Parser.Term.byTactic,
   `Lean.Parser.Tactic.tacticSeq,
   `Lean.Parser.Tactic.tacticSeq1Indented,
-  `Lean.Parser.Term.byTactic
+  `Lean.Parser.Tactic.withAnnotateState,
+  `Lean.cdotTk,
+  `«by»,
+  `«;»,
+  `«]»,
+  Lean.nullKind,
 ]
 
 public unsafe def main (args : List String) : IO Unit := do
@@ -27,6 +27,12 @@ public unsafe def main (args : List String) : IO Unit := do
       let .ofTacticInfo info := info | return
       let some (.original ..) := info.stx.getHeadInfo? | return
       if tacFilter.contains info.stx.getKind then return
+      let ppTac : String := toString info.stx.prettyPrint
+      let ppGoals : List String ← info.goalsBefore.mapM fun mvarId =>
+        mvarId.withContext do
+          let goal ← Lean.Meta.ppGoal mvarId
+          return toString goal
       handle.putStrLn <| Lean.Json.compress <| json% {
-        stx : $(toString info.stx.prettyPrint)
+        ppGoals : $(ppGoals),
+        ppTac : $(ppTac)
       }
