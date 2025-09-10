@@ -29,4 +29,4 @@ module_facet data (module) : FilePath := pure <$> do
 
 library_facet data (lib) : Array FilePath := do
   let modules ← (← lib.modules.fetch).await
-  return Job.collectArray <| ← modules.mapM (fetch <| ·.facet `data)
+  return Job.collectArray <| ← modules.mapM fun mod => mod.facet `data |>.fetch
