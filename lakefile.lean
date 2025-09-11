@@ -23,7 +23,7 @@ module_facet data (module) : FilePath := pure <$> do
   buildFileUnlessUpToDate' moduleDataFile do
     proc {
       cmd := scoutExe.toString
-      args := #[moduleSrcFile.toString, moduleDataFile.toString]
+      args := #["tactics", moduleSrcFile.toString, moduleDataFile.toString]
     }
   return moduleDataFile
 
