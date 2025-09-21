@@ -19,13 +19,13 @@ initialize dataExtractorsExt : PersistentEnvExtension Name Name NameSet ←
     exportEntriesFnEx _ s _ := s.toArray
   }
 
+syntax (name := dataExtractorAttr) "data_extractor" : attr
+
 initialize registerBuiltinAttribute {
   name := `dataExtractorAttr
   descr := "Register a data extractor"
   add n _ _ := modifyEnv fun e => dataExtractorsExt.addEntry e n
 }
-
-syntax (name := dataExtractorsTerm) "data_extractors" : term
 
 open Elab Term in
 elab "data_extractors" : term => do
