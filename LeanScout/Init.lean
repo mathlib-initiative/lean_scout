@@ -19,8 +19,6 @@ initialize dataExtractorsExt : PersistentEnvExtension Name Name NameSet ←
     exportEntriesFnEx _ s _ := s.toArray
   }
 
-syntax (name := dataExtractorAttr) "data_extractor" : attr
-
 initialize registerBuiltinAttribute {
   name := `dataExtractorAttr
   descr := "Register a data extractor"
