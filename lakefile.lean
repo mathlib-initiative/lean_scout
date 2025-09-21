@@ -26,4 +26,4 @@ module_facet tactics (module) : Unit := pure <$> do
 
 library_facet tactics (lib) : Unit := do
   let modules ← (← lib.modules.fetch).await
-  return discard <| Job.collectArray <| ← modules.mapM fun mod => mod.facet `data |>.fetch
+  return discard <| Job.collectArray <| ← modules.mapM fun mod => mod.facet `tactics |>.fetch
