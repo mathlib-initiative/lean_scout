@@ -20,16 +20,16 @@ def runFrontend (tgt : Target) (go : FrontendM α) : IO α := do
   go.run { inputCtx } |>.run' { commandState, parserState, cmdPos := parserState.pos }
 
 unsafe
-def withCommandState (tgt : Target) (go : Command.State → IO α) : IO α :=
+def withFinalCommandState (tgt : Target) (go : Command.State → IO α) : IO α :=
   tgt.runFrontend do processCommands ; go (← get).commandState
 
 unsafe
-def withInfoState (tgt : Target) (go : InfoState → IO α) : IO α :=
-  tgt.withCommandState fun s => go s.infoState
+def withFinalInfoState (tgt : Target) (go : InfoState → IO α) : IO α :=
+  tgt.withFinalCommandState fun s => go s.infoState
 
 unsafe
 def withInfoTrees (tgt : Target) (go : PersistentArray InfoTree → IO α) : IO α :=
-  tgt.withInfoState fun s => go s.trees
+  tgt.withFinalInfoState fun s => go s.trees
 
 unsafe
 def withVisitM (tgt : Target)
@@ -40,7 +40,13 @@ def withVisitM (tgt : Target)
 
 unsafe
 def withEnv (tgt : Target) (go : Environment → IO α) : IO α :=
-  tgt.withCommandState fun s => go s.env
+  tgt.withFinalCommandState fun s => go s.env
+
+unsafe
+def runCoreM (tgt : Target) (go : CoreM α) : IO α :=
+  tgt.withFinalCommandState fun s => Prod.fst <$> go.toIO
+    { fileName := tgt.fileName, fileMap := default }
+    { env := s.env }
 
 end Target
 

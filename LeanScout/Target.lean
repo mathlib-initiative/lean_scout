@@ -16,15 +16,14 @@ structure Target where
 namespace Target
 
 def mkImports
-    (imports : Array String)
-    (fileName : String := "<target>")
+    (imports : List String)
     (opts : Lean.Options := {}) : Target where
   src := Id.run do
     let mut out := ""
     for m in imports do
       out := out ++ s!"import {m}\n"
     return out
-  fileName := fileName
+  fileName := "<imports>"
   opts := opts
 
 def read
