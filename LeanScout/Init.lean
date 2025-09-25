@@ -1,12 +1,17 @@
 module
 
-public import LeanScout.DataExtractor
+public import LeanScout.Frontend
+public meta import Lean.Elab.Term
 
 open Lean
 
 public section
 
 namespace LeanScout
+
+public meta structure DataExtractor where
+  command : String
+  go : IO.FS.Handle → Target → IO Unit
 
 initialize dataExtractorsExt : PersistentEnvExtension Name Name NameSet ←
   registerPersistentEnvExtension {

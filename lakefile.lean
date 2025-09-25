@@ -21,7 +21,7 @@ module_facet tactics (module) : Unit := pure <$> do
   let outPath := module.filePath "." "jsonl"
   proc {
     cmd := scoutExe.toString
-    args := #["tactics", outPath.toString, "read", moduleSrcFile.toString]
+    args := #["tactics", "data", outPath.toString, "read", moduleSrcFile.toString]
   }
 
 library_facet tactics (lib) : Unit := do

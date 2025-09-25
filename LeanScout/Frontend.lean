@@ -43,9 +43,14 @@ def withEnv (tgt : Target) (go : Environment → IO α) : IO α :=
   tgt.withFinalCommandState fun s => go s.env
 
 unsafe
-def runCoreM (tgt : Target) (go : CoreM α) : IO α :=
+def runCoreM (tgt : Target) (go : CoreM α) : IO α := do
+  let initHeartbeats ← IO.getNumHeartbeats
   tgt.withFinalCommandState fun s => Prod.fst <$> go.toIO
-    { fileName := tgt.fileName, fileMap := default }
+    { fileName := tgt.fileName,
+      fileMap := default
+      initHeartbeats := initHeartbeats
+      maxHeartbeats := maxHeartbeats.get tgt.opts
+      options := tgt.opts }
     { env := s.env }
 
 end Target

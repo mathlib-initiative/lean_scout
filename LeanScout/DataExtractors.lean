@@ -72,4 +72,107 @@ public meta unsafe def tactics : DataExtractor where
         ppTac : $(ppTac)
       }
 
+section Subterms
+
+private meta def exprWithLCtx (e : Expr) : MetaM Json := do
+  let mut varFmts : Array (Name × Format × Option Format) := #[]
+  let lctx := (← getLCtx).sanitizeNames.run' { options := (← getOptions) } |>.run
+  let typeFmt ← Meta.ppExpr e
+  for decl in lctx do
+    if decl.isAuxDecl || decl.isImplementationDetail then continue
+    match decl with
+    | .cdecl _ _ nm tp _ .. =>
+      varFmts := varFmts.push (nm, ← Meta.ppExpr tp, none)
+    | .ldecl _ _ nm tp val .. =>
+      varFmts := varFmts.push (nm, ← Meta.ppExpr tp, ← Meta.ppExpr val)
+  let lctx : Array Json := varFmts.map fun (nm, tp, val?) => json%{
+    name : $(nm),
+    type : $(tp.pretty),
+    val? : $(val?.map fun fmt => fmt.pretty)
+  }
+  return json%{
+      expr : $(typeFmt.pretty),
+      lctx : $(lctx)
+    }
+
+private meta def writeSubterms
+    (handle : IO.FS.Handle)
+    (kind : String)
+    (parent : Name)
+    (e : Expr) : MetaM Unit := do
+  Meta.forEachExpr e fun e => do
+    let datapoint ← exprWithLCtx e
+    handle.putStrLn <| Json.compress <| json% {
+      kind : $(kind),
+      parent : $(parent),
+      expr : $(datapoint)
+    }
+
+@[data_extractor]
+public meta unsafe def subterms : DataExtractor where
+  command := "subterms"
+  go handle tgt := { tgt with opts := maxHeartbeats.set {} 0 }.runCoreM <| Meta.MetaM.run' do
+    let env ← getEnv
+    for (n, c) in env.constants do
+      if ← declNameFilter n then continue
+      println! n
+      let env ← getEnv
+      let module := env.getModuleIdxFor? n |>.map fun modIdx =>
+        env.header.moduleNames[modIdx]!
+      let tp := ← Meta.ppExpr c.type
+      let val ← c.value?.mapM Meta.ppExpr
+      let parent : Json := json% {
+        kind : "constant",
+        name : $(n),
+        module : $(module),
+        type : $(tp.pretty),
+        val : $(val.map Format.pretty)
+      }
+      handle.putStrLn parent.compress
+      writeSubterms handle "typeSubterm" n c.type
+      if let some val := c.value? then
+        writeSubterms handle "valueSubterms" n val
+
+private meta def writeSubtermsWithTypes
+    (handle : IO.FS.Handle)
+    (kind : String)
+    (parent : Name)
+    (e : Expr) : MetaM Unit := do
+  Meta.forEachExpr e fun e => do
+    let datapoint ← exprWithLCtx e
+    let datapointType ← exprWithLCtx <| ← Meta.inferType e
+    handle.putStrLn <| Json.compress <| json% {
+      kind : $(kind),
+      parent : $(parent),
+      expr : $(datapoint),
+      type : $(datapointType)
+    }
+
+@[data_extractor]
+public meta unsafe def subtermsWithTypes : DataExtractor where
+  command := "subtermsWithTypes"
+  go handle tgt := { tgt with opts := maxHeartbeats.set {} 0 }.runCoreM <| Meta.MetaM.run' do
+    let env ← getEnv
+    for (n, c) in env.constants do
+      if ← declNameFilter n then continue
+      println! n
+      let env ← getEnv
+      let module := env.getModuleIdxFor? n |>.map fun modIdx =>
+        env.header.moduleNames[modIdx]!
+      let tp := ← Meta.ppExpr c.type
+      let val ← c.value?.mapM Meta.ppExpr
+      let parent : Json := json% {
+        kind : "constant",
+        name : $(n),
+        module : $(module),
+        type : $(tp.pretty),
+        val : $(val.map Format.pretty)
+      }
+      handle.putStrLn parent.compress
+      writeSubtermsWithTypes handle "typeSubterm" n c.type
+      if let some val := c.value? then
+        writeSubtermsWithTypes handle "valueSubterms" n val
+
+end Subterms
+
 end LeanScout
