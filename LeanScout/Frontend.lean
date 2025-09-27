@@ -53,6 +53,24 @@ def runCoreM (tgt : Target) (go : CoreM α) : IO α := do
       options := tgt.opts }
     { env := s.env }
 
+unsafe
+def runParallelCoreM (tgt : Target) (go : Environment → Name → ConstantInfo → CoreM α) :
+    IO (Array (Task <| Except IO.Error α)) := do
+  let initHeartbeats ← IO.getNumHeartbeats
+  tgt.withFinalCommandState fun s => do
+    let ctx : Core.Context := {
+        fileName := tgt.fileName,
+        fileMap := default
+        initHeartbeats := initHeartbeats
+        maxHeartbeats := maxHeartbeats.get tgt.opts
+        options := tgt.opts }
+    let state : Core.State := { env := s.env }
+    let mut tasks : Array (Task <| Except IO.Error α) := #[]
+    for (n,c) in s.env.constants do
+      let task ← IO.asTask <| (go s.env n c |>.toIO ctx state) <&> Prod.fst
+      tasks := tasks.push task
+    return tasks
+
 end Target
 
 end LeanScout

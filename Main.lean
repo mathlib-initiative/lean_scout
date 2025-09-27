@@ -12,14 +12,14 @@ abbrev Command := String
 structure Options where
   command : Command
   dataDir : System.FilePath
-  outPath : System.FilePath
+  outPath : String
   target : Target
 
 abbrev M := ReaderT Options IO
 
 def getCommand : M Command := read <&> Options.command
 def getTarget : M Target := read <&> Options.target
-def getOutPath : M System.FilePath := read <&> Options.outPath
+def getOutPath : M String := read <&> Options.outPath
 def getDataDir : M System.FilePath := read <&> Options.dataDir
 
 def run (args : List String) (go : M α) : IO α := do
@@ -35,9 +35,15 @@ def main : M Unit := do
   let basePath : System.FilePath := (← getDataDir) / command
   let filePath := basePath / (← getOutPath) |>.normalize
   if let some fileDir := filePath.parent then IO.FS.createDirAll fileDir
-  let handle ← IO.FS.Handle.mk (basePath / (← getOutPath)) .write
+  let compressor ← IO.Process.spawn {
+    cmd := "zstd"
+    args := #["-o", s!"{basePath / (← getOutPath)}.zst"]
+    stdin := .piped
+  }
+  let (stdin, _) ← compressor.takeStdin
+  --let handle ← IO.FS.Handle.mk (basePath / (← getOutPath)) .write
   let tgt ← getTarget
-  for extractor in dataExtractors do extractor.go handle tgt
+  for extractor in dataExtractors do extractor.go stdin tgt
 
 end LeanScout
 
