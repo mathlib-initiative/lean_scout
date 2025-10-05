@@ -2,6 +2,7 @@ module
 
 public import LeanScout.Frontend
 public meta import Lean.Elab.Term
+public meta import LeanScout.Schema
 
 open Lean
 
@@ -11,6 +12,8 @@ namespace LeanScout
 
 public meta structure DataExtractor where
   command : String
+  schema : Arrow.Schema
+  key : String
   go : IO.FS.Handle → Target → IO Unit
 
 initialize dataExtractorsExt : PersistentEnvExtension Name Name NameSet ←

@@ -1,6 +1,7 @@
 module
 public meta import LeanScout.InfoTree
 public meta import LeanScout.Init
+public meta import LeanScout.Schema
 
 namespace LeanScout
 
@@ -45,6 +46,11 @@ meta def declNameFilter {m} [Monad m] [MonadEnv m] (declName : Name) : m Bool :=
 @[data_extractor]
 public meta unsafe def types : DataExtractor where
   command := "types"
+  schema := .mk [
+    { name := "name", nullable := false, type := .string },
+    { name := "type", nullable := false, type := .string },
+  ]
+  key := "name"
   go handle tgt := tgt.runCoreM <| Meta.MetaM.run' do
     let env ← getEnv
     for (n, c) in env.constants do
@@ -57,6 +63,11 @@ public meta unsafe def types : DataExtractor where
 @[data_extractor]
 public meta unsafe def tactics : DataExtractor where
   command := "tactics"
+  schema := .mk [
+    { name := "ppGoals", nullable := false, type := .list .string },
+    { name := "ppTac", nullable := false, type := .string },
+  ]
+  key := "ppTac"
   go handle tgt := discard <| tgt.withVisitM (α := Unit) (ctx? := none)
     (fun _ _ _ => return true) fun ctxInfo info _ _ => ctxInfo.runMetaM' {} do
       let .ofTacticInfo info := info | return
@@ -80,11 +91,19 @@ structure FVarGraph where
 
 meta def FVarGraph.toJson (idx : Std.HashMap FVarId Nat) (G : FVarGraph) : Json := json%{
   expr : $(G.exprDeps.toArray.map fun fvarId => idx.get? fvarId),
-  fvar : $(G.depGraph.toArray.map fun (fvarId, deps) => (
-    idx.get? fvarId,
-    deps.toArray.map fun fvarId => idx.get? fvarId
-  ))
+  fvar : $(G.depGraph.toArray.map fun (fvarId, deps) => json% {
+    var : $(idx.get? fvarId),
+    deps : $(deps.toArray.map fun fvarId => idx.get? fvarId)
+  })
 }
+
+meta def FVarGraph.dataType : Arrow.DataType := .struct [
+  { name := "expr", nullable := false, type := Arrow.dataTypeOf (Array Nat) },
+  { name := "fvar", nullable := false, type := .list <| .struct [
+    { name := "var", nullable := false, type := Arrow.dataTypeOf Nat },
+    { name := "deps", nullable := false, type := Arrow.dataTypeOf (Array Nat) },
+  ]}
+]
 
 meta def computeFVarGraph (e : Expr) : MetaM FVarGraph := do
   let mut exprDeps : Std.HashSet FVarId := {}
@@ -112,55 +131,34 @@ private meta def exprWithLCtx (e : Expr) : MetaM Json := do
         varFmts := varFmts.push (nm, ← Meta.ppExpr tp, ← Meta.ppExpr val, decl.isAuxDecl, decl.isImplementationDetail, idx.size)
       idx := idx.insert decl.fvarId idx.size
     let lctx : Array Json := varFmts.map fun (nm, tp, val?, isAux, isImpl, idx) => json%{
-      np : $(nm),
-      tp : $(tp.pretty),
-      val : $(val?.map fun fmt => fmt.pretty),
-      aux : $(isAux),
-      impl : $(isImpl),
+      name : $(nm),
+      type : $(tp.pretty),
+      value : $(val?.map fun fmt => fmt.pretty),
+      isAuxDetail : $(isAux),
+      isImplDetail : $(isImpl),
       idx : $(idx)
     }
     let fvarGraph ← computeFVarGraph e
     return json%{
         expr : $(typeFmt.pretty),
         lctx : $(lctx),
-        fvar : $(fvarGraph.toJson idx)
+        fvarGraph : $(fvarGraph.toJson idx)
       }
 
-private meta def writeSubterms
-    (handle : IO.FS.Handle)
-    (kind : String)
-    (parent : Name)
-    (e : Expr) : MetaM Unit := do
-  Meta.forEachExpr e fun e => do
-    let datapoint ← exprWithLCtx e
-    handle.putStrLn <| Json.compress <| json% {
-      kind : $(kind),
-      parent : $(parent),
-      expr : $(datapoint)
-    }
+meta def lCtxDatatype : Arrow.DataType := .struct [
+  { name := "name", nullable := false, type := .string },
+  { name := "type", nullable := false, type := .string },
+  { name := "value", nullable := true, type := .string },
+  { name := "isAuxDetail", nullable := false, type := .bool },
+  { name := "isImplDetail", nullable := false, type := .bool },
+  { name := "idx", nullable := false, type := .nat },
+]
 
-@[data_extractor]
-public meta unsafe def subterms : DataExtractor where
-  command := "subterms"
-  go handle tgt := discard <| { tgt with opts := maxHeartbeats.set {} 0 }.runParallelCoreM (α := Unit)
-    fun env n c => Meta.MetaM.run' do
-      if ← declNameFilter n then return
-      println! n
-      let module := env.getModuleIdxFor? n |>.map fun modIdx =>
-        env.header.moduleNames[modIdx]!
-      let tp := ← Meta.ppExpr c.type
-      let val ← c.value?.mapM Meta.ppExpr
-      let parent : Json := json% {
-        kind : "constant",
-        name : $(n),
-        module : $(module),
-        type : $(tp.pretty),
-        val : $(val.map Format.pretty)
-      }
-      handle.putStrLn parent.compress
-      writeSubterms handle "typeSubterm" n c.type
-      if let some val := c.value? then
-        writeSubterms handle "valueSubterms" n val
+meta def exprWithLCtxDatatype : Arrow.DataType := .struct [
+  { name := "expr", nullable := false, type := .string },
+  { name := "lctx", nullable := false, type := .list lCtxDatatype },
+  { name := "fvarGraph", nullable := false, type := FVarGraph.dataType }
+]
 
 private meta def writeSubtermsWithTypes
     (writer : Std.Mutex IO.FS.Handle)
@@ -180,32 +178,26 @@ private meta def writeSubtermsWithTypes
       }
       h.flush
 
+meta def subtermWithTypesSchema : Arrow.Schema := .mk [
+  { name := "kind", nullable := false, type := .string },
+  { name := "parent", nullable := false, type := .string },
+  { name := "expr", nullable := false, type := exprWithLCtxDatatype },
+  { name := "type", nullable := false, type := exprWithLCtxDatatype }
+]
+
 @[data_extractor]
 public meta unsafe def subtermsWithTypes : DataExtractor where
   command := "subtermsWithTypes"
+  key := "parent"
+  schema := subtermWithTypesSchema
   go handle tgt := do
     let writer : Std.Mutex IO.FS.Handle ← Std.Mutex.new handle
     discard <| { tgt with opts := maxHeartbeats.set {} 0 }.runParallelCoreM (α := Unit)
-      fun env n c => Meta.MetaM.run' do
+      fun _ n c => Meta.MetaM.run' do
         if ← declNameFilter n then return
-        let module := env.getModuleIdxFor? n |>.map fun modIdx =>
-          env.header.moduleNames[modIdx]!
-        let tp := ← Meta.ppExpr c.type
-        let val ← c.value?.mapM Meta.ppExpr
-        let parent : Json := json% {
-          kind : "constant",
-          name : $(n),
-          module : $(module),
-          type : $(tp.pretty),
-          val : $(val.map Format.pretty)
-        }
-        writer.atomically do
-          let h ← get
-          h.putStrLn parent.compress
-          h.flush
-        writeSubtermsWithTypes writer "typeSubterm" n c.type
+        writeSubtermsWithTypes writer "type" n c.type
         if let some val := c.value? then
-          writeSubtermsWithTypes writer "valueSubterms" n val
+          writeSubtermsWithTypes writer "val" n val
 
 end Subterms
 
