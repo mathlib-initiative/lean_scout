@@ -13,21 +13,19 @@ structure Options where
   scoutPath : System.FilePath
   command : Command
   dataDir : System.FilePath
-  outPath : String
   target : Target
 
 abbrev M := ReaderT Options IO
 
 def getCommand : M Command := read <&> Options.command
 def getTarget : M Target := read <&> Options.target
-def getOutPath : M String := read <&> Options.outPath
 def getDataDir : M System.FilePath := read <&> Options.dataDir
 def getScoutPath : M System.FilePath := read <&> Options.scoutPath
 
 def run (args : List String) (go : M α) : IO α := do
   match args with
-  | scoutPath :: cmd :: dataDir :: outPath :: "imports" :: args => go (.mk scoutPath cmd dataDir outPath <| .mkImports args)
-  | scoutPath :: cmd :: dataDir :: outPath :: "read" :: path :: [] => go (.mk scoutPath cmd dataDir outPath <| ← Target.read path)
+  | scoutPath :: cmd :: dataDir :: "imports" :: args => go (.mk scoutPath cmd dataDir <| .mkImports args)
+  | scoutPath :: cmd :: dataDir :: "read" :: path :: [] => go (.mk scoutPath cmd dataDir <| ← Target.read path)
   | _ => throw <| .userError "Usage: scout <COMMAND> [args]"
 
 meta unsafe
