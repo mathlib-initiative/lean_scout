@@ -35,8 +35,6 @@ def main : M Unit := do
   let basePath : System.FilePath := (← getDataDir) / command |>.normalize
   IO.FS.createDirAll basePath
   let realPath ← IO.FS.realPath basePath
-  --let filePath := basePath / (← getOutPath) |>.normalize
-  --if let some fileDir := filePath.parent then IO.FS.createDirAll fileDir
   let tgt ← getTarget
   for extractor in dataExtractors do
     let compressor ← IO.Process.spawn {
