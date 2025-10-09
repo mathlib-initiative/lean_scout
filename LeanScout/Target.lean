@@ -16,16 +16,23 @@ structure ImportsTarget extends BaseTarget where
 
 open Parser in
 structure InputTarget extends BaseTarget where
-  context : InputContext
+  path : System.FilePath
+
+def InputTarget.inputCtx (tgt : InputTarget) : IO Parser.InputContext :=
+  return Parser.mkInputContext (← IO.FS.readFile tgt.path) "<target>"
 
 inductive Target where
   | imports (imports : ImportsTarget)
   | input (input : InputTarget)
 
-def Target.read (path : System.FilePath) (opts : Options) : IO Target := do
-  let src ← IO.FS.readFile path
-  let ctx : Parser.InputContext := Parser.mkInputContext src "<target>"
-  return .input <| ⟨.mk opts, ctx⟩
+def Target.toString : Target → String
+  | .imports ⟨_, i⟩ => s!"imports {i}"
+  | .input ⟨_, i⟩ => s!"input {i}"
+
+abbrev Targets := Array Target
+
+def Target.read (path : System.FilePath) (opts : Options) : Target :=
+  .input <| ⟨.mk opts, path⟩
 
 def Target.mkImports (imports : Array String) (opts : Options) : Target :=
   .imports ⟨.mk opts, imports.map fun s => {
@@ -34,5 +41,8 @@ def Target.mkImports (imports : Array String) (opts : Options) : Target :=
     isExported := false
     isMeta := true
   }⟩
+
+def Targets.read (path : System.FilePath) (opts : Options) : IO Targets := do
+  IO.FS.lines path >>= Array.mapM fun s => return Target.read (opts := opts) <| .mk s
 
 end LeanScout

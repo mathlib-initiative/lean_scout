@@ -25,11 +25,11 @@ def getScoutPath : M System.FilePath := read <&> Options.scoutPath
 def run (args : List String) (go : M α) : IO α := do
   match args with
   | scoutPath :: cmd :: dataDir :: "imports" :: args => go (.mk scoutPath cmd dataDir <| .mkImports args.toArray {})
-  | scoutPath :: cmd :: dataDir :: "read" :: path :: [] => go (.mk scoutPath cmd dataDir <| ← Target.read path {})
+  | scoutPath :: cmd :: dataDir :: "read" :: path :: [] => go (.mk scoutPath cmd dataDir <| Target.read path {})
   | _ => throw <| .userError "Usage: scout <COMMAND> [args]"
 
 meta unsafe
-def main : M Unit := do
+def main : M UInt32 := do
   let command ← getCommand
   let dataExtractors := (data_extractors).filter fun e => e.command == command
   let basePath : System.FilePath := (← getDataDir) / command |>.normalize
@@ -49,6 +49,7 @@ def main : M Unit := do
     }
     let (stdin, _) ← compressor.takeStdin
     extractor.go stdin tgt
+  return 0
 
 end LeanScout
 

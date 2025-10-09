@@ -196,13 +196,13 @@ public meta unsafe def subtermsWithTypes : DataExtractor where
   schema := subtermWithTypesSchema
   go handle
   | .imports tgt => do
-    let writer : Std.Mutex IO.FS.Handle ← Std.Mutex.new handle
+    let handle ← Std.Mutex.new handle
     discard <| { tgt with opts := maxHeartbeats.set tgt.opts 0 }.runParallelCoreM  (α := Unit)
       fun _ n c => Meta.MetaM.run' do
         if ← declNameFilter n then return
-        writeSubtermsWithTypes writer "type" n c.type
+        writeSubtermsWithTypes handle "type" n c.type
         if let some val := c.value? then
-          writeSubtermsWithTypes writer "val" n val
+          writeSubtermsWithTypes handle "val" n val
   | _ => throw <| .userError "Unsupported Target"
 
 end Subterms

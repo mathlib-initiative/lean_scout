@@ -15,18 +15,13 @@ lean_exe lean_scout where
   root := `Main
   supportInterpreter := true
 
-module_facet tactics (module) : Unit := pure <$> do
-  let scoutExe ← (← «lean_scout».fetch).await
-  let moduleSrcFile := module.filePath module.pkg.rootDir "lean"
-  let outPath := module.filePath "." "jsonl"
-  proc {
-    cmd := scoutExe.toString
-    args := #["tactics", "data", outPath.toString, "read", moduleSrcFile.toString]
-  }
-
-library_facet tactics (lib) : Unit := do
+library_facet module_paths (lib) : System.FilePath := do
   let modules ← (← lib.modules.fetch).await
-  return discard <| Job.collectArray <| ← modules.mapM fun mod => mod.facet `tactics |>.fetch
+  let path : System.FilePath := "module_paths"
+  let handle ← IO.FS.Handle.mk path .write
+  for module in modules do
+    handle.putStrLn <| module.filePath module.pkg.rootDir "lean" |>.toString
+  return pure path
 
 script scout (args) := do
   let workspace ← getWorkspace
