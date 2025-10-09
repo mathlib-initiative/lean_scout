@@ -24,8 +24,8 @@ def getScoutPath : M System.FilePath := read <&> Options.scoutPath
 
 def run (args : List String) (go : M α) : IO α := do
   match args with
-  | scoutPath :: cmd :: dataDir :: "imports" :: args => go (.mk scoutPath cmd dataDir <| .mkImports args)
-  | scoutPath :: cmd :: dataDir :: "read" :: path :: [] => go (.mk scoutPath cmd dataDir <| ← Target.read path)
+  | scoutPath :: cmd :: dataDir :: "imports" :: args => go (.mk scoutPath cmd dataDir <| .mkImports args.toArray {})
+  | scoutPath :: cmd :: dataDir :: "read" :: path :: [] => go (.mk scoutPath cmd dataDir <| ← Target.read path {})
   | _ => throw <| .userError "Usage: scout <COMMAND> [args]"
 
 meta unsafe

@@ -51,7 +51,8 @@ public meta unsafe def types : DataExtractor where
     { name := "type", nullable := false, type := .string },
   ]
   key := "name"
-  go handle tgt := tgt.runCoreM <| Meta.MetaM.run' do
+  go handle
+  | .imports tgt => tgt.runCoreM <| Meta.MetaM.run' do
     let env ← getEnv
     for (n, c) in env.constants do
       if ← declNameFilter n then continue
@@ -59,6 +60,7 @@ public meta unsafe def types : DataExtractor where
         name : $(n),
         type : $(s!"{← Meta.ppExpr c.type}")
       }
+  | _ => throw <| .userError "Unsupported Target"
 
 @[data_extractor]
 public meta unsafe def tactics : DataExtractor where
@@ -68,7 +70,8 @@ public meta unsafe def tactics : DataExtractor where
     { name := "ppTac", nullable := false, type := .string },
   ]
   key := "ppTac"
-  go handle tgt := discard <| tgt.withVisitM (α := Unit) (ctx? := none)
+  go handle
+  | .input tgt => discard <| tgt.withVisitM (α := Unit) (ctx? := none)
     (fun _ _ _ => return true) fun ctxInfo info _ _ => ctxInfo.runMetaM' {} do
       let .ofTacticInfo info := info | return
       let some (.original ..) := info.stx.getHeadInfo? | return
@@ -82,6 +85,7 @@ public meta unsafe def tactics : DataExtractor where
         ppGoals : $(ppGoals),
         ppTac : $(ppTac)
       }
+  | _ => throw <| .userError "Unsupported Target"
 
 section Subterms
 
@@ -190,14 +194,16 @@ public meta unsafe def subtermsWithTypes : DataExtractor where
   command := "subtermsWithTypes"
   key := "parent"
   schema := subtermWithTypesSchema
-  go handle tgt := do
+  go handle
+  | .imports tgt => do
     let writer : Std.Mutex IO.FS.Handle ← Std.Mutex.new handle
-    discard <| { tgt with opts := maxHeartbeats.set {} 0 }.runParallelCoreM (α := Unit)
+    discard <| { tgt with opts := maxHeartbeats.set tgt.opts 0 }.runParallelCoreM  (α := Unit)
       fun _ n c => Meta.MetaM.run' do
         if ← declNameFilter n then return
         writeSubtermsWithTypes writer "type" n c.type
         if let some val := c.value? then
           writeSubtermsWithTypes writer "val" n val
+  | _ => throw <| .userError "Unsupported Target"
 
 end Subterms
 
