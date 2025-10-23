@@ -177,6 +177,7 @@ class ShardedParquetWriter:
     def close(self) -> dict:
         """Close all writers and return statistics."""
         self.flush_all()
+
         for writer in self.writers.values():
             writer.close()
 
@@ -209,16 +210,13 @@ def main():
         shard_key=args.key
     )
 
-    # Process stream
-    for record in tqdm(stream_json_lines(sys.stdin)):
+    for record in tqdm(stream_json_lines(sys.stdin), file=sys.stderr, desc="Processing records"):
         writer.add_record(record)
 
-    # Finalize and report stats
     stats = writer.close()
-    print(
-        f"Wrote {stats['total_rows']} rows into {stats['num_shards']} shard files under {stats['out_dir']}",
-        file=sys.stderr
-    )
+
+    # Write stats and ensure it's flushed before exit
+    sys.stderr.write(f"Wrote {stats['total_rows']} rows into {stats['num_shards']} shard files under {stats['out_dir']}\n")
 
 if __name__ == "__main__":
     main()

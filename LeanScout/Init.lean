@@ -11,36 +11,46 @@ public section
 namespace LeanScout
 
 public meta structure DataExtractor where
-  command : String
   schema : Arrow.Schema
   key : String
   go : IO.FS.Handle → Target → IO Unit
 
-initialize dataExtractorsExt : PersistentEnvExtension Name Name NameSet ←
+abbrev Command := Name
+
+initialize dataExtractorsExt : PersistentEnvExtension (Command × Name) (Command × Name) (Std.HashMap Command Name) ←
   registerPersistentEnvExtension {
     mkInitial := return {}
     addImportedFn as := do
       let mut out := {}
-      for bs in as do for b in bs do out := out.insert b
+      for bs in as do for (x,y) in bs do out := out.insert x y
       return out
-    addEntryFn := .insert
+    addEntryFn S := fun (x,y) => S.insert x y
     exportEntriesFnEx _ s _ := s.toArray
   }
 
-syntax (name := dataExtractorAttr) "data_extractor" : attr
+syntax (name := dataExtractorAttr) "data_extractor" ident : attr
 
 initialize registerBuiltinAttribute {
   name := `dataExtractorAttr
   descr := "Register a data extractor"
-  add n _ _ := modifyEnv fun e => dataExtractorsExt.addEntry e n
+  add n s _ := do
+    let `(attr|data_extractor $cmd:ident) := s
+      | throwError "data_extractor attribute must be of the form `data_extractor <cmd>`"
+    let dataExtractors := dataExtractorsExt.getState (← getEnv)
+    let cmd := cmd.getId
+    if dataExtractors.contains cmd then
+      throwError "data extractor {cmd} is already registered"
+    modifyEnv fun e => dataExtractorsExt.addEntry e (cmd,n)
 }
 
 open Elab Term in
 elab "data_extractors" : term => do
   let extractors := dataExtractorsExt.getState (← getEnv)
-  let mut out ← Meta.mkAppOptM ``Array.empty #[some (.const ``DataExtractor [])]
-  for extractor in extractors do
-    out ← Meta.mkAppOptM ``Array.push #[none, out, some <| .const extractor []]
+  let mut out ← Meta.mkAppOptM ``Std.HashMap.empty
+    #[some (.const ``Command []), some (.const ``DataExtractor []), none, none, some (toExpr 8)]
+  for (cmd,extractor) in extractors do
+    out ← Meta.mkAppOptM ``Std.HashMap.insert
+      #[none, none, none, none, out, some <| toExpr cmd, some <| .const extractor []]
   return out
 
 end LeanScout

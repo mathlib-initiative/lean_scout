@@ -29,6 +29,6 @@ script scout (args) := do
     throw <| .userError "Failed to find lean_scout dependency"
   let child ← IO.Process.spawn {
     cmd := "lake"
-    args := #["exe", "lean_scout", scout.rootDir.toString] ++ args.toArray
+    args := #["exe", "lean_scout", "--scoutPath", scout.rootDir.toString] ++ args.toArray
   }
   child.wait

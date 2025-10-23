@@ -3,57 +3,77 @@ module
 public import LeanScout
 public meta import LeanScout.DataExtractors
 
-namespace LeanScout
+namespace LeanScout.CLI
 
 open Lean
 
 abbrev Command := String
 
 structure Options where
-  scoutPath : System.FilePath
-  command : Command
-  dataDir : System.FilePath
-  target : Target
+  scoutPath : Option System.FilePath := none
+  command : Option Command := none
+  dataDir : Option System.FilePath := none
+  target : Option Target := none
 
 abbrev M := ReaderT Options IO
 
-def getCommand : M Command := read <&> Options.command
-def getTarget : M Target := read <&> Options.target
-def getDataDir : M System.FilePath := read <&> Options.dataDir
-def getScoutPath : M System.FilePath := read <&> Options.scoutPath
+def getCommand : M Command := do
+  match ← read <&> Options.command with
+  | some cmd => return cmd
+  | none => throw <| .userError "No command specified. Use --command"
 
-def run (args : List String) (go : M α) : IO α := do
+def getTarget : M Target := do
+  match ← read <&> Options.target with
+  | some tgt => return tgt
+  | none => throw <| .userError "No target specified. Use --imports or --read"
+
+def getDataDir : M System.FilePath := do
+  match ← read <&> Options.dataDir with
+  | some dir => return dir
+  | none => throw <| .userError "No data directory specified. Use --dataDir"
+
+def getScoutPath : M System.FilePath := do
+  match ← read <&> Options.scoutPath with
+  | some path => return path
+  | none => throw <| .userError "No scout path specified. Use --scoutPath"
+
+def processArgs (args : List String) (opts : Options) : Options :=
   match args with
-  | scoutPath :: cmd :: dataDir :: "imports" :: args => go (.mk scoutPath cmd dataDir <| .mkImports args.toArray {})
-  | scoutPath :: cmd :: dataDir :: "read" :: path :: [] => go (.mk scoutPath cmd dataDir <| Target.read path {})
-  | _ => throw <| .userError "Usage: scout <COMMAND> [args]"
+  | "--scoutPath" :: path :: args => processArgs args { opts with scoutPath := some path }
+  | "--command" :: command :: args => processArgs args { opts with command := some command }
+  | "--dataDir" :: dataDir :: args => processArgs args { opts with dataDir := some dataDir }
+  | "--read" :: [path] => { opts with target := some <| .read path {} }
+  | "--imports" :: importsList => { opts with target := some <| .mkImports importsList.toArray {} }
+  | _ => opts
+
+def run (args : List String) (go : M α) : IO α := go <| processArgs args {}
 
 meta unsafe
 def main : M UInt32 := do
   let command ← getCommand
-  let dataExtractors := (data_extractors).filter fun e => e.command == command
+  let some extractor := (data_extractors).get? command.toName
+    | throw <| .userError "Unknown command: {command}"
   let basePath : System.FilePath := (← getDataDir) / command |>.normalize
   IO.FS.createDirAll basePath
   let realPath ← IO.FS.realPath basePath
   let tgt ← getTarget
-  for extractor in dataExtractors do
-    let compressor ← IO.Process.spawn {
-      cmd := "uv"
-      cwd := ← getScoutPath
-      args := #["run", "main.py",
-        "--basePath", realPath.toString,
-        "--schema", extractor.schema.toJson.compress,
-        "--key", extractor.key
-      ]
-      stdin := .piped
-    }
-    let (stdin, _) ← compressor.takeStdin
-    extractor.go stdin tgt
-  return 0
+  let compressor ← IO.Process.spawn {
+    cmd := "uv"
+    cwd := ← getScoutPath
+    args := #["run", "main.py",
+      "--basePath", realPath.toString,
+      "--schema", extractor.schema.toJson.compress,
+      "--key", extractor.key
+    ]
+    stdin := .piped
+  }
+  let (stdin, child) ← compressor.takeStdin
+  extractor.go stdin tgt
+  child.wait
 
-end LeanScout
+end LeanScout.CLI
 
 open LeanScout
 
 public meta unsafe def main (args : List String) := do
-  LeanScout.run args LeanScout.main
+  LeanScout.CLI.run args LeanScout.CLI.main

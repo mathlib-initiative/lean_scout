@@ -43,9 +43,8 @@ meta def declNameFilter {m} [Monad m] [MonadEnv m] (declName : Name) : m Bool :=
   if ← Meta.isMatcher declName then return true
   return false
 
-@[data_extractor]
+@[data_extractor types]
 public meta unsafe def types : DataExtractor where
-  command := "types"
   schema := .mk [
     { name := "name", nullable := false, type := .string },
     { name := "type", nullable := false, type := .string },
@@ -62,9 +61,8 @@ public meta unsafe def types : DataExtractor where
       }
   | _ => throw <| .userError "Unsupported Target"
 
-@[data_extractor]
+@[data_extractor tactics]
 public meta unsafe def tactics : DataExtractor where
-  command := "tactics"
   schema := .mk [
     { name := "ppGoals", nullable := false, type := .list .string },
     { name := "ppTac", nullable := false, type := .string },
@@ -189,9 +187,8 @@ meta def subtermWithTypesSchema : Arrow.Schema := .mk [
   { name := "type", nullable := false, type := exprWithLCtxDatatype }
 ]
 
-@[data_extractor]
+@[data_extractor subtermsWithTypes]
 public meta unsafe def subtermsWithTypes : DataExtractor where
-  command := "subtermsWithTypes"
   key := "parent"
   schema := subtermWithTypesSchema
   go handle
