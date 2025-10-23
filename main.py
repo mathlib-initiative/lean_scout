@@ -188,7 +188,6 @@ class ShardedParquetWriter:
         }
 
 def main():
-    # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Stream JSON lines to sharded Parquet files")
     parser.add_argument("--schema", type=str, help="PyArrow schema as JSON line")
     parser.add_argument("--schema-file", type=str, help="Path to file containing PyArrow schema JSON")
@@ -198,10 +197,8 @@ def main():
     parser.add_argument("--basePath", type=str, required=True, help="Base output directory path")
     args = parser.parse_args()
 
-    # Load schema
     schema = load_schema(args.schema, args.schema_file)
 
-    # Create writer
     writer = ShardedParquetWriter(
         schema=schema,
         out_dir=args.basePath,
@@ -215,7 +212,6 @@ def main():
 
     stats = writer.close()
 
-    # Write stats and ensure it's flushed before exit
     sys.stderr.write(f"Wrote {stats['total_rows']} rows into {stats['num_shards']} shard files under {stats['out_dir']}\n")
 
 if __name__ == "__main__":
