@@ -54,6 +54,7 @@ def main : M UInt32 := do
   let some extractor := (data_extractors).get? command.toName
     | throw <| .userError "Unknown command: {command}"
   let basePath : System.FilePath := (← getDataDir) / command |>.normalize
+  if ← basePath.isDir then throw <| .userError s!"Data directory {basePath} already exists. Aborting."
   IO.FS.createDirAll basePath
   let realPath ← IO.FS.realPath basePath
   let tgt ← getTarget
