@@ -24,10 +24,10 @@ meta def FVarGraph.toJson (idx : Std.HashMap FVarId Nat) (G : FVarGraph) : Json 
 }
 
 meta def FVarGraph.dataType : Arrow.DataType := .struct [
-  { name := "expr", nullable := false, type := Arrow.dataTypeOf (Array Nat) },
+  { name := "expr", nullable := false, type := .list .nat },
   { name := "fvar", nullable := false, type := .list <| .struct [
-    { name := "var", nullable := false, type := Arrow.dataTypeOf Nat },
-    { name := "deps", nullable := false, type := Arrow.dataTypeOf (Array Nat) },
+    { name := "var", nullable := false, type := .nat },
+    { name := "deps", nullable := false, type := .list .nat },
   ]}
 ]
 
