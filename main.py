@@ -103,48 +103,30 @@ class ShardedParquetWriter:
         self.compression = compression
 
         self.writers = {}   # shard -> pq.ParquetWriter (opened lazily)
-        self.buffers = {}   # shard -> {field_name: []}
+        self.buffers = {}   # shard -> []
         self.counts = {}    # shard -> total rows written
 
         os.makedirs(self.out_dir, exist_ok=True)
-
-    def _init_buffer(self) -> dict:
-        """Create a new buffer with columns for all schema fields."""
-        return {field.name: [] for field in self.schema}
 
     def add_record(self, record: dict) -> None:
         """Add a record to the appropriate shard buffer, flushing if needed."""
         # Get shard key value
         shard_key_value = record.get(self.shard_key)
-        if shard_key_value is None:
-            return  # must have shard key to determine shard
-
-        # Validate required (non-nullable) fields are present
-        for field in self.schema:
-            if not field.nullable and field.name not in record:
-                return  # Skip records missing required fields
 
         shard = compute_shard(shard_key_value, self.num_shards)
-        buffer = self.buffers.setdefault(shard, self._init_buffer())
+        buffer = self.buffers.setdefault(shard, [])
 
-        # Append values for all fields in schema
-        for field in self.schema:
-            buffer[field.name].append(record.get(field.name))
+        # Append values
+        buffer.append(record)
 
         # Check if buffer is full
-        first_field = self.schema[0].name
-        if len(buffer[first_field]) >= self.batch_rows:
+        if len(buffer) >= self.batch_rows:
             self.flush_shard(shard)
 
     def flush_shard(self, shard: int) -> None:
         """Flush a specific shard's buffer to disk."""
-        buffer = self.buffers.get(shard)
-        if not buffer:
-            return
-
-        # Check if buffer has any data (check first field)
-        first_field = self.schema[0].name
-        if not buffer[first_field]:
+        records = self.buffers.get(shard)
+        if not records:
             return
 
         # Open writer lazily
@@ -152,22 +134,13 @@ class ShardedParquetWriter:
             path = os.path.join(self.out_dir, f"part-{shard:03d}.parquet")
             self.writers[shard] = pq.ParquetWriter(path, self.schema, compression=self.compression)
             self.counts[shard] = 0
-
-        # Convert buffer from columnar to row format
-        num_rows = len(buffer[first_field])
-        records = []
-        for i in range(num_rows):
-            record = {field.name: buffer[field.name][i] for field in self.schema}
-            records.append(record)
         
         # Let PyArrow handle nested structs automatically
         table = pa.Table.from_pylist(records, schema=self.schema)
         self.writers[shard].write_table(table)
         self.counts[shard] += table.num_rows
 
-        # Clear buffer
-        for field in self.schema:
-            buffer[field.name].clear()
+        records.clear()
 
     def flush_all(self) -> None:
         """Flush all shard buffers to disk."""

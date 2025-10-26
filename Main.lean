@@ -10,9 +10,9 @@ open Lean
 abbrev Command := String
 
 structure Options where
-  scoutPath : Option System.FilePath := none
+  scoutPath : System.FilePath := "."
   command : Option Command := none
-  dataDir : Option System.FilePath := none
+  dataDir : System.FilePath := "."
   target : Option Target := none
 
 abbrev M := ReaderT Options IO
@@ -27,21 +27,15 @@ def getTarget : M Target := do
   | some tgt => return tgt
   | none => throw <| .userError "No target specified. Use --imports or --read"
 
-def getDataDir : M System.FilePath := do
-  match ← read <&> Options.dataDir with
-  | some dir => return dir
-  | none => throw <| .userError "No data directory specified. Use --dataDir"
+def getDataDir : M System.FilePath := read <&> Options.dataDir
 
-def getScoutPath : M System.FilePath := do
-  match ← read <&> Options.scoutPath with
-  | some path => return path
-  | none => throw <| .userError "No scout path specified. Use --scoutPath"
+def getScoutPath : M System.FilePath := read <&> Options.scoutPath
 
 def processArgs (args : List String) (opts : Options) : Options :=
   match args with
-  | "--scoutPath" :: path :: args => processArgs args { opts with scoutPath := some path }
+  | "--scoutPath" :: path :: args => processArgs args { opts with scoutPath := path }
   | "--command" :: command :: args => processArgs args { opts with command := some command }
-  | "--dataDir" :: dataDir :: args => processArgs args { opts with dataDir := some dataDir }
+  | "--dataDir" :: dataDir :: args => processArgs args { opts with dataDir := dataDir }
   | "--read" :: [path] => { opts with target := some <| .read path {} }
   | "--imports" :: importsList => { opts with target := some <| .mkImports importsList.toArray {} }
   | _ => opts
