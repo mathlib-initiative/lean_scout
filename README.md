@@ -51,7 +51,7 @@ to create `parquet` files of the form `types/*.parquet`, a dataset can be create
 from datasets import Dataset
 import glob
 
-d = Dataset.from_parquet(glob.glob("types/*.parquet"))
+dataset = Dataset.from_parquet(glob.glob("types/*.parquet"))
 ```
 or as follows:
 ```python
