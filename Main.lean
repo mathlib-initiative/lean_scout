@@ -11,9 +11,11 @@ abbrev Command := String
 
 structure Options where
   scoutPath : System.FilePath := "."
-  command : Option Command := none
-  dataDir : System.FilePath := "."
   target : Option Target := none
+  dataDir : System.FilePath := "."
+  command : Option Command := none
+  batchRows : Nat := 1024
+  numShards : Nat := 128
 
 abbrev M := ReaderT Options IO
 
@@ -31,11 +33,17 @@ def getDataDir : M System.FilePath := read <&> Options.dataDir
 
 def getScoutPath : M System.FilePath := read <&> Options.scoutPath
 
+def getNumShards : M Nat := read <&> Options.numShards
+
+def getBatchRows : M Nat := read <&> Options.batchRows
+
 def processArgs (args : List String) (opts : Options) : Options :=
   match args with
   | "--scoutPath" :: path :: args => processArgs args { opts with scoutPath := path }
   | "--command" :: command :: args => processArgs args { opts with command := some command }
   | "--dataDir" :: dataDir :: args => processArgs args { opts with dataDir := dataDir }
+  | "--numShards" :: n :: args => processArgs args { opts with numShards := n.toNat! }
+  | "--batchRows" :: n :: args => processArgs args { opts with batchRows := n.toNat! }
   | "--read" :: [path] => { opts with target := some <| .read path {} }
   | "--imports" :: importsList => { opts with target := some <| .mkImports importsList.toArray {} }
   | _ => opts
@@ -56,9 +64,11 @@ def main : M UInt32 := do
     cmd := "uv"
     cwd := ← getScoutPath
     args := #["run", "main.py",
+      "--numShards", s!"{← getNumShards}",
+      "--batchRows", s!"{← getBatchRows}",
       "--basePath", realPath.toString,
+      "--key", extractor.key,
       "--schema", extractor.schema.toJson.compress,
-      "--key", extractor.key
     ]
     stdin := .piped
   }

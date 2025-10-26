@@ -165,8 +165,8 @@ def main():
     parser.add_argument("--schema", type=str, help="PyArrow schema as JSON line")
     parser.add_argument("--schema-file", type=str, help="Path to file containing PyArrow schema JSON")
     parser.add_argument("--key", type=str, required=True, help="Field name to use for sharding")
-    parser.add_argument("--num-shards", type=int, default=128, help="Number of shard files (default: 128)")
-    parser.add_argument("--batch-rows", type=int, default=1024, help="Rows per batch before flushing (default: 1024)")
+    parser.add_argument("--numShards", type=int, default=128, help="Number of shard files (default: 128)")
+    parser.add_argument("--batchRows", type=int, default=1024, help="Rows per batch before flushing (default: 1024)")
     parser.add_argument("--basePath", type=str, required=True, help="Base output directory path")
     args = parser.parse_args()
 
@@ -175,8 +175,8 @@ def main():
     writer = ShardedParquetWriter(
         schema=schema,
         out_dir=args.basePath,
-        num_shards=args.num_shards,
-        batch_rows=args.batch_rows,
+        num_shards=args.numShards,
+        batch_rows=args.batchRows,
         shard_key=args.key
     )
 
