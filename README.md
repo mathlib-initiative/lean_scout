@@ -59,3 +59,29 @@ from datasets import load_dataset
 
 dataset = load_dataset("parquet", data_dir="types", split="train")
 ```
+
+# How does LeanScout work?
+
+At a high level, LeanScout works by running a python script `main.py` as a subprocess, and sending the data to this script via stdio.
+The python script is responsible for actually writing the data to disk, organized as parquet shards. 
+
+# Data Extractors
+
+LeanScout uses "data extractors" to create datasets.
+The type of data extractors is defined as follows:
+```lean
+structure DataExtractor where
+  schema : Arrow.Schema
+  key : String
+  go : IO.FS.Handle → Target → IO Unit 
+```
+
+Here, 
+- `schema` is the schema of the data being stored. This is serialized into json, and deserialized by the python script responsible for actually storing the data on disk.
+- `key` is the key that will be used to compute the shard associated with a given datapoint.
+- `go` is the main function that communicates with the python script. The `IO.FS.Handle` parameter is the stdin of the data storing python subprocess, and the `Target` is the target that is being processed.
+
+When declaring a new data extractor, it should be tagged with the `data_extractor` attribute.
+The syntax for this is `@[data_extractor cmd]`, where `cmd` is the command that will be used to call the data extractor being defined. 
+
+The syntax `data_extractors`, which is used in the main CLI defined in `Main.lean`, elaborates to a `Std.HashMap Command DataExtractor` which contains all of the data extractors with the associated command that have been tagged as such in the given environment.

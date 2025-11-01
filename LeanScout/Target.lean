@@ -14,7 +14,6 @@ structure BaseTarget where
 structure ImportsTarget extends BaseTarget where
   imports : Array Import
 
-open Parser in
 structure InputTarget extends BaseTarget where
   path : System.FilePath
 
@@ -29,8 +28,6 @@ def Target.toString : Target → String
   | .imports ⟨_, i⟩ => s!"imports {i}"
   | .input ⟨_, i⟩ => s!"input {i}"
 
-abbrev Targets := Array Target
-
 def Target.read (path : System.FilePath) (opts : Options) : Target :=
   .input <| ⟨.mk opts, path⟩
 
@@ -41,8 +38,5 @@ def Target.mkImports (imports : Array String) (opts : Options) : Target :=
     isExported := false
     isMeta := true
   }⟩
-
-def Targets.read (path : System.FilePath) (opts : Options) : IO Targets := do
-  IO.FS.lines path >>= Array.mapM fun s => return Target.read (opts := opts) <| .mk s
 
 end LeanScout
