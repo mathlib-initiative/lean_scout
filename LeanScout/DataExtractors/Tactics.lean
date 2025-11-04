@@ -1,8 +1,8 @@
 module
-public meta import LeanScout.InfoTree
-public meta import LeanScout.Init
-public meta import LeanScout.Schema
-public meta import LeanScout.DataExtractors.Utils
+public import LeanScout.DataExtractors.Utils
+public import LeanScout.Frontend
+public import LeanScout.InfoTree
+public import LeanScout.Init
 
 open Lean
 
@@ -10,7 +10,7 @@ namespace LeanScout
 namespace DataExtractors
 
 @[data_extractor tactics]
-public meta unsafe def tactics : DataExtractor where
+public unsafe def tactics : DataExtractor where
   schema := .mk [
     { name := "ppGoals", nullable := false, type := .list .string },
     { name := "ppTac", nullable := false, type := .string },

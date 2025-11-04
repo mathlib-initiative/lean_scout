@@ -1,8 +1,7 @@
 module
-public meta import LeanScout.InfoTree
-public meta import LeanScout.Init
-public meta import LeanScout.Schema
-public meta import LeanScout.DataExtractors.Utils
+public import LeanScout.DataExtractors.Utils
+public import LeanScout.Frontend
+public import LeanScout.Init
 
 open Lean
 
@@ -10,7 +9,7 @@ namespace LeanScout
 namespace DataExtractors
 
 @[data_extractor types]
-public meta unsafe def types : DataExtractor where
+public unsafe def types : DataExtractor where
   schema := .mk [
     { name := "name", nullable := false, type := .string },
     { name := "module", nullable := true, type := .string },

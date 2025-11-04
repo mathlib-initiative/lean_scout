@@ -1,7 +1,6 @@
 module
 
 public import LeanScout
-public meta import LeanScout.DataExtractors
 
 namespace LeanScout.CLI
 
@@ -50,7 +49,7 @@ def processArgs (args : List String) (opts : Options) : Options :=
 
 def run (args : List String) (go : M α) : IO α := go <| processArgs args {}
 
-meta unsafe
+unsafe
 def main : M UInt32 := do
   let command ← getCommand
   let some extractor := (data_extractors).get? command.toName
@@ -80,5 +79,5 @@ end LeanScout.CLI
 
 open LeanScout
 
-public meta unsafe def main (args : List String) := do
+public unsafe def main (args : List String) := do
   LeanScout.CLI.run args LeanScout.CLI.main

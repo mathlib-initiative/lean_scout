@@ -2,5 +2,7 @@ module
 public import LeanScout.Frontend
 public import LeanScout.InfoTree
 public import LeanScout.Target
-public meta import LeanScout.Init
-public meta import LeanScout.DataExtractors
+public import LeanScout.Init
+public import LeanScout.DataExtractors
+public import LeanScout.Types
+public import LeanScout.Schema

@@ -1,6 +1,6 @@
 module
 
-public meta import Lean
+public import LeanScout.Types
 
 open Lean
 
@@ -8,30 +8,8 @@ public section
 
 namespace Arrow
 
-mutual
-
-inductive DataType where
-  | bool : DataType
-  | nat : DataType
-  | int : DataType
-  | string : DataType
-  | float : DataType
-  | list : DataType → DataType
-  | struct : List Field → DataType
-
-structure Field where
-  name : String
-  type : DataType
-  nullable : Bool := true
-
-end
-
-/-- Arrow schema -/
-structure Schema where
-  fields : List Field
-
 /-- Convert DataType to JSON -/
-meta def DataType.toJson : DataType → Lean.Json
+def DataType.toJson : DataType → Lean.Json
   | .bool => Lean.Json.mkObj [("name", "bool")]
   | .nat => Lean.Json.mkObj [("name", "uint64")]
   | .int => Lean.Json.mkObj [("name", "int64")]
@@ -41,7 +19,7 @@ meta def DataType.toJson : DataType → Lean.Json
   | .struct _ => Lean.Json.mkObj [("name", "struct")]
 
 /-- Convert Field to JSON -/
-meta partial def Field.toJson (f : Field) : Lean.Json :=
+partial def Field.toJson (f : Field) : Lean.Json :=
   let baseObj := [
     ("name", .str f.name),
     ("nullable", .bool f.nullable),
@@ -61,7 +39,7 @@ meta partial def Field.toJson (f : Field) : Lean.Json :=
   Lean.Json.mkObj withChildren
 
 /-- Convert Schema to JSON -/
-meta def Schema.toJson (s : Schema) : Lean.Json :=
+def Schema.toJson (s : Schema) : Lean.Json :=
   Lean.Json.mkObj [("fields", Lean.Json.arr (s.fields.map Field.toJson |>.toArray))]
 
 end Arrow

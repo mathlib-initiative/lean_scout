@@ -1,6 +1,6 @@
 module
 
-public meta import Lean.Elab.InfoTree
+public import Lean.Elab.InfoTree
 
 namespace Lean.Elab.ContextInfo
 
@@ -8,7 +8,7 @@ namespace Lean.Elab.ContextInfo
 Similar to `Lean.Elab.ContextInfo.runCoreM`, but fixes an issue with heartbeats.
 See
 -/
-public meta def runCoreM' (info : ContextInfo) (x : CoreM α) : IO α := do
+public def runCoreM' (info : ContextInfo) (x : CoreM α) : IO α := do
   let initHeartbeats ← IO.getNumHeartbeats
   Prod.fst <$> x.toIO
     { currNamespace := info.currNamespace,
@@ -20,5 +20,5 @@ public meta def runCoreM' (info : ContextInfo) (x : CoreM α) : IO α := do
       options := info.options }
     { env := info.env, ngen := info.ngen }
 
-public meta def runMetaM' (info : ContextInfo) (lctx : LocalContext) (x : MetaM α) : IO α := do
+public def runMetaM' (info : ContextInfo) (lctx : LocalContext) (x : MetaM α) : IO α := do
   Prod.fst <$> info.runCoreM' (x.run { lctx := lctx } { mctx := info.mctx })

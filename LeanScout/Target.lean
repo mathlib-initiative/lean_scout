@@ -1,6 +1,6 @@
 module
 
-public import Lean
+public import LeanScout.Types
 
 public section
 
@@ -8,21 +8,8 @@ namespace LeanScout
 
 open Lean Elab Frontend
 
-structure BaseTarget where
-  opts : Options
-
-structure ImportsTarget extends BaseTarget where
-  imports : Array Import
-
-structure InputTarget extends BaseTarget where
-  path : System.FilePath
-
 def InputTarget.inputCtx (tgt : InputTarget) : IO Parser.InputContext :=
   return Parser.mkInputContext (← IO.FS.readFile tgt.path) "<target>"
-
-inductive Target where
-  | imports (imports : ImportsTarget)
-  | input (input : InputTarget)
 
 def Target.toString : Target → String
   | .imports ⟨_, i⟩ => s!"imports {i}"

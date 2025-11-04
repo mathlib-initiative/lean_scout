@@ -1,8 +1,7 @@
 module
-public meta import LeanScout.InfoTree
-public meta import LeanScout.Init
-public meta import LeanScout.Schema
-public meta import LeanScout.DataExtractors.Utils
+public import LeanScout.DataExtractors.Utils
+public import LeanScout.Frontend
+public import LeanScout.Init
 
 namespace LeanScout
 namespace DataExtractors
@@ -15,7 +14,7 @@ structure FVarGraph where
   depGraph : Std.HashMap FVarId (Std.HashSet FVarId)
   exprDeps : Std.HashSet FVarId
 
-meta def FVarGraph.toJson (idx : Std.HashMap FVarId Nat) (G : FVarGraph) : Json := json%{
+def FVarGraph.toJson (idx : Std.HashMap FVarId Nat) (G : FVarGraph) : Json := json%{
   expr : $(G.exprDeps.toArray.map fun fvarId => idx.get? fvarId),
   fvar : $(G.depGraph.toArray.map fun (fvarId, deps) => json% {
     var : $(idx.get? fvarId),
@@ -23,7 +22,7 @@ meta def FVarGraph.toJson (idx : Std.HashMap FVarId Nat) (G : FVarGraph) : Json 
   })
 }
 
-meta def FVarGraph.dataType : Arrow.DataType := .struct [
+def FVarGraph.dataType : Arrow.DataType := .struct [
   { name := "expr", nullable := false, type := .list .nat },
   { name := "fvar", nullable := false, type := .list <| .struct [
     { name := "var", nullable := false, type := .nat },
@@ -31,7 +30,7 @@ meta def FVarGraph.dataType : Arrow.DataType := .struct [
   ]}
 ]
 
-meta def computeFVarGraph (e : Expr) : MetaM FVarGraph := do
+def computeFVarGraph (e : Expr) : MetaM FVarGraph := do
   let mut exprDeps : Std.HashSet FVarId := {}
   let mut depGraph : Std.HashMap FVarId (Std.HashSet FVarId) := {}
   for decl in ← getLCtx do
@@ -43,7 +42,7 @@ meta def computeFVarGraph (e : Expr) : MetaM FVarGraph := do
         depGraph := depGraph.insert f <| (depGraph.getD f {}).insert g
   return ⟨depGraph, exprDeps⟩
 
-private meta def exprWithLCtx (e : Expr) : MetaM Json := do
+private def exprWithLCtx (e : Expr) : MetaM Json := do
   let lctx := (← getLCtx).sanitizeNames.run' { options := (← getOptions) } |>.run
   Meta.withLCtx lctx (← Meta.getLocalInstances) do
     let mut varFmts : Array (Name × Format × Option Format × Bool × Bool × Nat) := #[]
@@ -71,7 +70,7 @@ private meta def exprWithLCtx (e : Expr) : MetaM Json := do
         fvarGraph : $(fvarGraph.toJson idx)
       }
 
-meta def lCtxDatatype : Arrow.DataType := .struct [
+def lCtxDatatype : Arrow.DataType := .struct [
   { name := "name", nullable := false, type := .string },
   { name := "type", nullable := false, type := .string },
   { name := "value", nullable := true, type := .string },
@@ -80,13 +79,13 @@ meta def lCtxDatatype : Arrow.DataType := .struct [
   { name := "idx", nullable := false, type := .nat },
 ]
 
-meta def exprWithLCtxDatatype : Arrow.DataType := .struct [
+def exprWithLCtxDatatype : Arrow.DataType := .struct [
   { name := "expr", nullable := false, type := .string },
   { name := "lctx", nullable := false, type := .list lCtxDatatype },
   { name := "fvarGraph", nullable := false, type := FVarGraph.dataType }
 ]
 
-private meta def writeSubtermsWithTypes
+private def writeSubtermsWithTypes
     (writer : Std.Mutex IO.FS.Handle)
     (kind : String)
     (parent : Name)
@@ -104,7 +103,7 @@ private meta def writeSubtermsWithTypes
       }
       h.flush
 
-meta def subtermWithTypesSchema : Arrow.Schema := .mk [
+def subtermWithTypesSchema : Arrow.Schema := .mk [
   { name := "kind", nullable := false, type := .string },
   { name := "parent", nullable := false, type := .string },
   { name := "expr", nullable := false, type := exprWithLCtxDatatype },
@@ -112,7 +111,7 @@ meta def subtermWithTypesSchema : Arrow.Schema := .mk [
 ]
 
 @[data_extractor subtermsWithTypes]
-public meta unsafe def subtermsWithTypes : DataExtractor where
+public unsafe def subtermsWithTypes : DataExtractor where
   key := "parent"
   schema := subtermWithTypesSchema
   go handle
