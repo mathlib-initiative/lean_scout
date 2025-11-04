@@ -4,7 +4,7 @@ public import Lean
 
 public section
 
-namespace Arrow
+namespace LeanScout
 
 mutual
 
@@ -16,21 +16,20 @@ inductive DataType where
   | float : DataType
   | list : DataType → DataType
   | struct : List Field → DataType
+deriving BEq
 
 structure Field where
   name : String
   type : DataType
   nullable : Bool := true
+deriving BEq
 
 end
 
 /-- Arrow schema -/
 structure Schema where
   fields : List Field
-
-end Arrow
-
-namespace LeanScout
+deriving BEq
 
 open Lean
 
@@ -69,7 +68,7 @@ use the CLI to call this data extractor with the command `cmd`.
 See `LeanScout.DataExtractors.types` for an example.
 -/
 structure DataExtractor where
-  schema : Arrow.Schema
+  schema : Schema
   key : String
   go : IO.FS.Handle → Target → IO Unit
 

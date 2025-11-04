@@ -6,40 +6,65 @@ open Lean
 
 public section
 
-namespace Arrow
+namespace LeanScout
 
-/-- Convert DataType to JSON -/
-def DataType.toJson : DataType → Lean.Json
-  | .bool => Lean.Json.mkObj [("name", "bool")]
-  | .nat => Lean.Json.mkObj [("name", "uint64")]
-  | .int => Lean.Json.mkObj [("name", "int64")]
-  | .string => Lean.Json.mkObj [("name", "string")]
-  | .float => Lean.Json.mkObj [("name", "float64")]
-  | .list _ => Lean.Json.mkObj [("name", "list")]
-  | .struct _ => Lean.Json.mkObj [("name", "struct")]
+mutual
 
-/-- Convert Field to JSON -/
+partial def DataType.toJson (d : DataType) : Lean.Json := match d with
+  | .bool => json% { datatype : "bool" }
+  | .nat => json% { datatype : "nat" }
+  | .int => json% { datatype : "int" }
+  | .string => json% { datatype : "string" }
+  | .float => json% { datatype : "float" }
+  | .list item => json% { datatype : "list", item : $(DataType.toJson item) }
+  | .struct children => json% { datatype : "struct", children : $(children.map Field.toJson |>.toArray) }
+
 partial def Field.toJson (f : Field) : Lean.Json :=
-  let baseObj := [
-    ("name", .str f.name),
-    ("nullable", .bool f.nullable),
-    ("type", f.type.toJson)
-  ]
-  -- Add children for nested types
-  let withChildren : List (String × Json) := match f.type with
-    | .list itemType => baseObj ++ [(
-        "children",
-        .arr #[Field.toJson { name := "item", type := itemType, nullable := true }]
-      )]
-    | .struct fields => baseObj ++ [(
-        "children",
-        .arr (fields.map Field.toJson |>.toArray)
-      )]
-    | _ => baseObj
-  Lean.Json.mkObj withChildren
+  json% {
+    "name" : $(f.name),
+    "type" : $(f.type.toJson),
+    "nullable" : $(f.nullable)
+  }
 
-/-- Convert Schema to JSON -/
-def Schema.toJson (s : Schema) : Lean.Json :=
-  Lean.Json.mkObj [("fields", Lean.Json.arr (s.fields.map Field.toJson |>.toArray))]
+end
 
-end Arrow
+mutual
+
+partial def DataType.fromJson? (j : Json) : Except String DataType := do
+  match ← j.getObjValAs? String "datatype" with
+  | "bool" => return .bool
+  | "nat" => return .nat
+  | "int" => return .int
+  | "string" => return .string
+  | "float" => return .float
+  | "list" =>
+    let item ← j.getObjVal? "item"
+    return .list <| ← DataType.fromJson? item
+  | "struct" =>
+    let children ← j.getObjValAs? (Array Json) "children"
+    return .struct <| (← children.mapM Field.fromJson?).toList
+  | t => throw s!"Invalid DataType {t}"
+
+partial def Field.fromJson? (j : Json) : Except String Field := do
+  let nm ← j.getObjValAs? String "name"
+  let nullable ← j.getObjValAs? Bool "nullable"
+  let tp ← DataType.fromJson? (← j.getObjVal? "type")
+  return { name := nm, type := tp, nullable := nullable }
+
+end
+
+def Schema.toJson (s : Schema) : Json :=
+  json% { fields : $(s.fields.map Field.toJson |>.toArray) }
+
+def Schema.fromJson? (j : Json) : Except String Schema := do
+  let fieldsJson ← j.getObjValAs? (Array Json) "fields"
+  let fields ← fieldsJson.mapM Field.fromJson?
+  return { fields := fields.toList }
+
+instance : ToJson Schema where
+  toJson := Schema.toJson
+
+instance : FromJson Schema where
+  fromJson? := Schema.fromJson?
+
+end LeanScout

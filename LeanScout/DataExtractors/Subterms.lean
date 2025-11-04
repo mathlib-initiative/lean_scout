@@ -22,7 +22,7 @@ def FVarGraph.toJson (idx : Std.HashMap FVarId Nat) (G : FVarGraph) : Json := js
   })
 }
 
-def FVarGraph.dataType : Arrow.DataType := .struct [
+def FVarGraph.dataType : DataType := .struct [
   { name := "expr", nullable := false, type := .list .nat },
   { name := "fvar", nullable := false, type := .list <| .struct [
     { name := "var", nullable := false, type := .nat },
@@ -70,7 +70,7 @@ def exprWithLCtx (e : Expr) : MetaM Json := do
         fvarGraph : $(fvarGraph.toJson idx)
       }
 
-def lCtxDatatype : Arrow.DataType := .struct [
+def lCtxDatatype : DataType := .struct [
   { name := "name", nullable := false, type := .string },
   { name := "type", nullable := false, type := .string },
   { name := "value", nullable := true, type := .string },
@@ -79,7 +79,7 @@ def lCtxDatatype : Arrow.DataType := .struct [
   { name := "idx", nullable := false, type := .nat },
 ]
 
-def exprWithLCtxDatatype : Arrow.DataType := .struct [
+def exprWithLCtxDatatype : DataType := .struct [
   { name := "expr", nullable := false, type := .string },
   { name := "lctx", nullable := false, type := .list lCtxDatatype },
   { name := "fvarGraph", nullable := false, type := FVarGraph.dataType }
@@ -103,7 +103,7 @@ private def writeSubtermsWithTypes
       }
       h.flush
 
-def subtermWithTypesSchema : Arrow.Schema := .mk [
+def subtermWithTypesSchema : Schema := .mk [
   { name := "kind", nullable := false, type := .string },
   { name := "parent", nullable := false, type := .string },
   { name := "expr", nullable := false, type := exprWithLCtxDatatype },

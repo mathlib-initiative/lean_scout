@@ -7,6 +7,10 @@ package lean_scout where
   leanOptions := #[
     ⟨`experimental.module, true⟩
   ]
+  testDriver := "LeanScoutTest"
+
+lean_lib LeanScoutTest where
+  globs := #[.submodules `LeanScoutTest]
 
 @[default_target]
 lean_lib LeanScout

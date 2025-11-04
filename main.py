@@ -9,37 +9,32 @@ from typing import Iterator, Optional, Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-def datatype_from_json(type_obj : dict, children=None):
-    name = type_obj.get("name")
-    if name == "bool":
+def datatype_from_json(type_obj : dict):
+    datatype = type_obj.get("datatype")
+    if datatype == "bool":
         return pa.bool_()
-    elif name == "uint64":
+    elif datatype == "nat":
         return pa.uint64()
-    elif name == "int64":
+    elif datatype == "int64":
         return pa.int64()
-    elif name == "float64":
+    elif datatype == "float64":
         return pa.float64()
-    elif name == "string":
+    elif datatype == "string":
         return pa.string()
-    elif name == "list":
-        if children and len(children) > 0:
-            item_field = field_from_json(children[0])
-            return pa.list_(item_field)
-        else:
-            raise ValueError("List type must have children")
-    elif name == "struct":
-        if children:
-            fields = [field_from_json(child) for child in children]
-            return pa.struct(fields)
-        else:
-            return pa.struct([])
+    elif datatype == "list":
+        item = type_obj.get("item", {})
+        item_datatype = datatype_from_json(item)  
+        return pa.list_(item_datatype)
+    elif datatype == "struct":
+        children = type_obj.get("children", [])
+        fields = [field_from_json(child) for child in children]
+        return pa.struct(fields)
 
 def field_from_json(field_obj : dict):
     name = field_obj.get("name")
     nullable = field_obj.get("nullable", True)
     type_obj = field_obj.get("type", {})
-    children = field_obj.get("children", None)
-    datatype = datatype_from_json(type_obj, children)
+    datatype = datatype_from_json(type_obj)
     return pa.field(name, datatype, nullable=nullable)
 
 def schema_from_json(schema_obj : dict):
