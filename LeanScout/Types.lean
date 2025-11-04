@@ -68,7 +68,7 @@ use the CLI to call this data extractor with the command `cmd`.
 
 See `LeanScout.DataExtractors.types` for an example.
 -/
-public structure DataExtractor where
+structure DataExtractor where
   schema : Arrow.Schema
   key : String
   go : IO.FS.Handle → Target → IO Unit

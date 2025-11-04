@@ -4,16 +4,17 @@ public import LeanScout.Types
 
 open Lean
 
-public section
+
+public meta section
 
 namespace LeanScout
 
 abbrev Command := Name
 
-meta def reservedCommands : List Command :=
+def reservedCommands : List Command :=
   [ `extractors ]
 
-meta initialize dataExtractorsExt : PersistentEnvExtension (Command × Name) (Command × Name) (Std.HashMap Command Name) ←
+initialize dataExtractorsExt : PersistentEnvExtension (Command × Name) (Command × Name) (Std.HashMap Command Name) ←
   registerPersistentEnvExtension {
     mkInitial := return {}
     addImportedFn as := do
@@ -26,7 +27,7 @@ meta initialize dataExtractorsExt : PersistentEnvExtension (Command × Name) (Co
 
 syntax (name := dataExtractorAttr) "data_extractor" ident : attr
 
-meta initialize registerBuiltinAttribute {
+initialize registerBuiltinAttribute {
   name := `dataExtractorAttr
   descr := "Register a data extractor"
   add n s _ := do

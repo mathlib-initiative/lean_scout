@@ -42,7 +42,7 @@ def computeFVarGraph (e : Expr) : MetaM FVarGraph := do
         depGraph := depGraph.insert f <| (depGraph.getD f {}).insert g
   return ⟨depGraph, exprDeps⟩
 
-private def exprWithLCtx (e : Expr) : MetaM Json := do
+def exprWithLCtx (e : Expr) : MetaM Json := do
   let lctx := (← getLCtx).sanitizeNames.run' { options := (← getOptions) } |>.run
   Meta.withLCtx lctx (← Meta.getLocalInstances) do
     let mut varFmts : Array (Name × Format × Option Format × Bool × Bool × Nat) := #[]

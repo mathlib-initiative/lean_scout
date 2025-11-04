@@ -3,12 +3,14 @@ public import Lean
 
 open Lean
 
+public section
+
 namespace LeanScout
 namespace DataExtractors
 
 -- A more agressive Variant of `Lean.Name.isBlackListed`.
 -- TODO: We need a more robust way to ignore internal constants.
-public def declNameFilter {m} [Monad m] [MonadEnv m] (declName : Name) : m Bool := do
+def declNameFilter {m} [Monad m] [MonadEnv m] (declName : Name) : m Bool := do
   if declName == ``sorryAx then return true
   if declName matches .str _ "inj" then return true
   if declName matches .str _ "injEq" then return true
@@ -30,7 +32,7 @@ public def declNameFilter {m} [Monad m] [MonadEnv m] (declName : Name) : m Bool 
   if ← Meta.isMatcher declName then return true
   return false
 
-public def tacFilter : Lean.SyntaxNodeKinds := [
+def tacFilter : Lean.SyntaxNodeKinds := [
   `Lean.Parser.Term.byTactic,
   `Lean.Parser.Tactic.tacticSeq,
   `Lean.Parser.Tactic.tacticSeq1Indented,
