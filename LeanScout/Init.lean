@@ -10,6 +10,9 @@ namespace LeanScout
 
 abbrev Command := Name
 
+meta def reservedCommands : List Command :=
+  [ `extractors ]
+
 meta initialize dataExtractorsExt : PersistentEnvExtension (Command × Name) (Command × Name) (Std.HashMap Command Name) ←
   registerPersistentEnvExtension {
     mkInitial := return {}
@@ -31,6 +34,7 @@ meta initialize registerBuiltinAttribute {
       | throwError "data_extractor attribute must be of the form `data_extractor <cmd>`"
     let dataExtractors := dataExtractorsExt.getState (← getEnv)
     let cmd := cmd.getId
+    if reservedCommands.contains cmd then throwError "data extractor {cmd} is a reserved command"
     if dataExtractors.contains cmd then
       throwError "data extractor {cmd} is already registered"
     modifyEnv fun e => dataExtractorsExt.addEntry e (cmd,n)

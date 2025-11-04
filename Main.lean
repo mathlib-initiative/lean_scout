@@ -52,8 +52,13 @@ def run (args : List String) (go : M α) : IO α := go <| processArgs args {}
 unsafe
 def main : M UInt32 := do
   let command ← getCommand
-  let some extractor := (data_extractors).get? command.toName
-    | throw <| .userError "Unknown command: {command}"
+  let dataExtractors := data_extractors
+  if command == "extractors" then
+    for (e, _) in dataExtractors do
+      println! e
+    return 0
+  let some extractor := dataExtractors.get? command.toName
+    | throw <| .userError s!"Unknown command: {command}"
   let basePath : System.FilePath := (← getDataDir) / command |>.normalize
   if ← basePath.isDir then throw <| .userError s!"Data directory {basePath} already exists. Aborting."
   IO.FS.createDirAll basePath
