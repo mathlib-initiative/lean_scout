@@ -1,0 +1,9 @@
+#!/bin/env bash
+
+TEMPDIR=$(mktemp -d)
+
+lake build
+
+lake run scout --command subtermsWithTypes --dataDir $TEMPDIR --imports Init
+
+uv run tests/test.py $TEMPDIR/types
