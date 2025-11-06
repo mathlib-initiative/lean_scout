@@ -67,7 +67,7 @@ def main : M UInt32 := do
   let compressor ← IO.Process.spawn {
     cmd := "uv"
     cwd := ← getScoutPath
-    args := #["run", "main.py",
+    args := #["run", "python", "-m", "lean_scout",
       "--numShards", s!"{← getNumShards}",
       "--batchRows", s!"{← getBatchRows}",
       "--basePath", realPath.toString,

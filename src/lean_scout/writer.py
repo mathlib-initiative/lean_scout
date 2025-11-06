@@ -1,62 +1,9 @@
-#!/usr/bin/env python3
-import sys
 import json
 import os
 import hashlib
-import argparse
-from tqdm import tqdm
 from typing import Iterator, Optional, Any
 import pyarrow as pa
 import pyarrow.parquet as pq
-
-def datatype_from_json(type_obj : dict):
-    datatype = type_obj.get("datatype")
-    if datatype == "bool":
-        return pa.bool_()
-    elif datatype == "nat":
-        return pa.uint64()
-    elif datatype == "int64":
-        return pa.int64()
-    elif datatype == "float64":
-        return pa.float64()
-    elif datatype == "string":
-        return pa.string()
-    elif datatype == "list":
-        item = type_obj.get("item", {})
-        item_datatype = datatype_from_json(item)  
-        return pa.list_(item_datatype)
-    elif datatype == "struct":
-        children = type_obj.get("children", [])
-        fields = [field_from_json(child) for child in children]
-        return pa.struct(fields)
-
-def field_from_json(field_obj : dict):
-    name = field_obj.get("name")
-    nullable = field_obj.get("nullable", True)
-    type_obj = field_obj.get("type", {})
-    datatype = datatype_from_json(type_obj)
-    return pa.field(name, datatype, nullable=nullable)
-
-def schema_from_json(schema_obj : dict):
-    fields = [field_from_json(field) for field in schema_obj.get("fields", [])]
-    return pa.schema(fields)
-
-def deserialize_schema(json_str : str):
-    schema_obj = json.loads(json_str)
-    return schema_from_json(schema_obj)
-
-def load_schema(schema_str: Optional[str] = None, schema_file: Optional[str] = None) -> pa.Schema:
-    """Load PyArrow schema from pandas-compatible JSON string or file."""
-    schema_json = None
-    if schema_str:
-        schema_json = schema_str
-    elif schema_file:
-        with open(schema_file, 'r') as f:
-            schema_json = f.read()
-    else:
-        raise ValueError("Either --schema or --schema-file must be provided")
-
-    return deserialize_schema(schema_json)
 
 def stream_json_lines(input_stream) -> Iterator[dict]:
     """Stream and parse JSON lines from input, skipping malformed lines."""
@@ -129,7 +76,7 @@ class ShardedParquetWriter:
             path = os.path.join(self.out_dir, f"part-{shard:03d}.parquet")
             self.writers[shard] = pq.ParquetWriter(path, self.schema, compression=self.compression)
             self.counts[shard] = 0
-        
+
         # Let PyArrow handle nested structs automatically
         table = pa.Table.from_pylist(records, schema=self.schema)
         self.writers[shard].write_table(table)
@@ -154,33 +101,3 @@ class ShardedParquetWriter:
             "num_shards": len(self.writers),
             "out_dir": self.out_dir
         }
-
-def main():
-    parser = argparse.ArgumentParser(description="Stream JSON lines to sharded Parquet files")
-    parser.add_argument("--schema", type=str, help="PyArrow schema as JSON line")
-    parser.add_argument("--schema-file", type=str, help="Path to file containing PyArrow schema JSON")
-    parser.add_argument("--key", type=str, required=True, help="Field name to use for sharding")
-    parser.add_argument("--numShards", type=int, default=128, help="Number of shard files (default: 128)")
-    parser.add_argument("--batchRows", type=int, default=1024, help="Rows per batch before flushing (default: 1024)")
-    parser.add_argument("--basePath", type=str, required=True, help="Base output directory path")
-    args = parser.parse_args()
-
-    schema = load_schema(args.schema, args.schema_file)
-
-    writer = ShardedParquetWriter(
-        schema=schema,
-        out_dir=args.basePath,
-        num_shards=args.numShards,
-        batch_rows=args.batchRows,
-        shard_key=args.key
-    )
-
-    for record in tqdm(stream_json_lines(sys.stdin), file=sys.stderr, desc="Processing records"):
-        writer.add_record(record)
-
-    stats = writer.close()
-
-    sys.stderr.write(f"Wrote {stats['total_rows']} rows into {stats['num_shards']} shard files under {stats['out_dir']}\n")
-
-if __name__ == "__main__":
-    main()

@@ -4,6 +4,8 @@ TEMPDIR=$(mktemp -d)
 
 lake build
 
+lake test
+
 lake run scout --command types --dataDir $TEMPDIR --imports Init
 
-uv run tests/test.py $TEMPDIR/types
+uv run test/test.py $TEMPDIR/types
