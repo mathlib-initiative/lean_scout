@@ -1,11 +1,17 @@
 #!/bin/env bash
 
-TEMPDIR=$(mktemp -d)
+set -e  # Exit on error
 
+echo "=== Building Lean Scout ==="
 lake build
 
+echo ""
+echo "=== Running Lean Schema Tests ==="
 lake test
 
-lake run scout --command types --dataDir $TEMPDIR --imports Init
+echo ""
+echo "=== Running Python Unit Tests ==="
+uv run pytest test/test_types.py -v
 
-uv run test/test.py $TEMPDIR/types
+echo ""
+echo "=== All Tests Passed ==="

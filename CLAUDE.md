@@ -45,12 +45,55 @@ lake run scout --command types --numShards 32 --imports Lean
 # Run Lean unit tests (schema roundtrip tests)
 lake test
 
-# Run the integration test (builds, extracts, validates)
+# Run all tests (Lean + Python unit tests + integration)
 ./run_tests
+
+# Run just Python unit tests
+uv run pytest test/test_types.py -v
 ```
 
-- `lake test` builds the `LeanScoutTest` library, which includes schema serialization/deserialization tests
-- `./run_tests` creates a temporary directory, extracts types from `Init`, and validates the parquet files
+Lean Scout has three levels of testing:
+
+1. **Lean Schema Tests** (`lake test`): Tests schema serialization/deserialization roundtrip using `#guard_msgs`
+2. **Python Unit Tests** (`pytest`): Tests data extractors against known expected outputs using YAML specifications
+3. **Integration Test**: Full end-to-end extraction and validation
+
+#### Adding New Test Cases
+
+To test specific constants from an extractor, edit or create a YAML spec in `test/fixtures/`:
+
+```yaml
+# test/fixtures/types_init.yaml
+description: "Test types extractor on Init module"
+source: "Init"
+
+# Exact matches: verify complete record equality
+exact_matches:
+  - name: "Nat.add"
+    module: "Init.Prelude"
+    type: "Nat → Nat → Nat"
+
+# Property checks: verify specific properties
+property_checks:
+  - name: "List.map"
+    properties:
+      module_contains: "Init"
+      type_contains: "List"
+      module_not_null: true
+
+# Count checks: verify dataset statistics
+count_checks:
+  min_records: 1000
+  has_names:
+    - "Nat.add"
+    - "List.map"
+```
+
+The test framework:
+- Runs extraction once per test session (efficient)
+- Verifies exact matches for critical constants
+- Checks properties for flexibility (e.g., substring matching)
+- Validates dataset completeness (minimum record counts, required names)
 
 ### Python Development
 ```bash
@@ -58,7 +101,7 @@ lake test
 uv sync
 
 # Run Python tests
-uv run test/test.py <path-to-parquet-directory>
+uv run pytest test/test_types.py -v
 ```
 
 ### List Available Extractors
@@ -147,6 +190,35 @@ The key field is specified per extractor (e.g., `types` uses `"name"` as the key
 - `scout` script: wraps `lake exe lean_scout` with `--scoutPath` automatically set to the Scout dependency root
 
 **Important**: When Lean Scout is used as a dependency in another project, use `lake run scout` (which invokes the script), not `lake exe lean_scout` directly. The script ensures the correct `--scoutPath` is passed.
+
+### Test Infrastructure
+
+The test suite consists of:
+
+1. **Lean Schema Tests** (`LeanScoutTest/Schema.lean`):
+   - Uses `#guard_msgs` to test schema JSON serialization/deserialization
+   - Validates roundtrip through Python's schema parser
+   - Tests all data types: bool, nat, int, float, string, list, struct
+
+2. **Python Unit Tests** (`test/test_types.py`):
+   - Uses pytest framework with YAML-based test specifications
+   - Extracts data once per test session (module-scoped fixture)
+   - Three types of assertions:
+     - **Exact matches**: Full field equality for specific constants
+     - **Property checks**: Substring matching and nullability checks
+     - **Count checks**: Minimum records and required name existence
+   - Helper utilities in `test/helpers.py` for querying datasets
+
+3. **Test Fixtures** (`test/fixtures/*.yaml`):
+   - Declarative YAML specifications for expected outputs
+   - Easy to read, write, and maintain
+   - Version controlled alongside code
+   - Example: `types_init.yaml` tests the types extractor on Init module
+
+4. **Integration Script** (`./run_tests`):
+   - Runs all three test levels sequentially
+   - Creates temporary directory for extraction
+   - Validates full end-to-end pipeline
 
 ## Adding a New Data Extractor
 
