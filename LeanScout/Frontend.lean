@@ -29,15 +29,23 @@ def withFinalInfoState (tgt : InputTarget) (go : InfoState → IO α) : IO α :=
   tgt.withFinalCommandState fun s => go s.infoState
 
 unsafe
-def withInfoTrees (tgt : InputTarget) (go : PersistentArray InfoTree → IO α) : IO α :=
-  tgt.withFinalInfoState fun s => go s.trees
+def withInfoTrees (tgt : InputTarget) (go : InfoTree → IO α) : IO (Array α) :=
+  tgt.runFrontend do
+    let mut done := false
+    let mut out := #[]
+    while !done do
+      done ← processCommand
+      if let some lastInfoTree := (← get).commandState.infoState.trees.toArray.back? then
+        let res ← go lastInfoTree
+        out := out.push res
+    return out
 
 unsafe
 def withVisitM (tgt : InputTarget)
     (preNode : ContextInfo → Info → PersistentArray InfoTree → IO Bool)
     (postNode : ContextInfo → Info → PersistentArray InfoTree → List (Option α) → IO α)
-    (ctx? : Option ContextInfo) : IO (PersistentArray (Option α)) := do
-  tgt.withInfoTrees fun trees => trees.mapM fun tree => tree.visitM preNode postNode ctx?
+    (ctx? : Option ContextInfo) : IO (Array (Option α)) := do
+  tgt.withInfoTrees fun tree => tree.visitM preNode postNode ctx?
 
 end InputTarget
 
