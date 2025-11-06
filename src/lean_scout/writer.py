@@ -1,29 +1,10 @@
 import json
 import os
 import hashlib
-from typing import Iterator, Optional, Any
+from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-def stream_json_lines(input_stream) -> Iterator[dict]:
-    """Stream and parse JSON lines from input, skipping malformed lines."""
-    for line in input_stream:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            yield json.loads(line)
-        except json.JSONDecodeError:
-            continue  # skip malformed lines
-
-def compute_shard(value: Any, num_shards: int) -> int:
-    """Hash a value to determine its shard. Converts to string if needed."""
-    if isinstance(value, str):
-        s = value
-    else:
-        s = json.dumps(value, sort_keys=True)
-    h = hashlib.blake2b(s.encode("utf-8"), digest_size=8).digest()
-    return int.from_bytes(h, "big") % num_shards
 
 class ShardedParquetWriter:
     """Manages sharded parquet file writing with batching."""
@@ -50,12 +31,21 @@ class ShardedParquetWriter:
 
         os.makedirs(self.out_dir, exist_ok=True)
 
+    def _compute_shard(self, value: Any) -> int:
+        """Hash a value to determine its shard. Converts to string if needed."""
+        if isinstance(value, str):
+            s = value
+        else:
+            s = json.dumps(value, sort_keys=True)
+        h = hashlib.blake2b(s.encode("utf-8"), digest_size=8).digest()
+        return int.from_bytes(h, "big") % self.num_shards
+
     def add_record(self, record: dict) -> None:
         """Add a record to the appropriate shard buffer, flushing if needed."""
         # Get shard key value
         shard_key_value = record.get(self.shard_key)
 
-        shard = compute_shard(shard_key_value, self.num_shards)
+        shard = self._compute_shard(shard_key_value)
         buffer = self.buffers.setdefault(shard, [])
 
         # Append values

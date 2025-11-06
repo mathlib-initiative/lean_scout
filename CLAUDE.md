@@ -46,11 +46,11 @@ lake run scout --command types --numShards 32 --imports Lean
 lake test
 
 # Run the integration test (builds, extracts, validates)
-./test
+./run_tests
 ```
 
 - `lake test` builds the `LeanScoutTest` library, which includes schema serialization/deserialization tests
-- `./test` creates a temporary directory, extracts types from `Init`, and validates the parquet files
+- `./run_tests` creates a temporary directory, extracts types from `Init`, and validates the parquet files
 
 ### Python Development
 ```bash
@@ -58,7 +58,7 @@ lake test
 uv sync
 
 # Run Python tests
-uv run python tests/test.py <path-to-parquet-directory>
+uv run test/test.py <path-to-parquet-directory>
 ```
 
 ### List Available Extractors
@@ -118,16 +118,22 @@ Schema definition uses a custom Arrow-compatible type system:
 The Python code is organized as a proper package:
 - `src/lean_scout/`: Main package directory
   - `__init__.py`: Exports public API
-  - `writer.py`: Core functionality (schema parsing, sharding, Parquet writing)
+  - `utils.py`: Utility functions (schema parsing, JSON streaming)
+  - `writer.py`: Sharded Parquet writing with batching
   - `__main__.py`: CLI entry point
 
 ### Sharding Strategy
 
-Sharding uses BLAKE2b hashing of the key field (in `src/lean_scout/writer.py`):
+Sharding uses BLAKE2b hashing of the key field. The `ShardedParquetWriter._compute_shard()` private method (in `src/lean_scout/writer.py`) computes the shard assignment:
 ```python
-def compute_shard(value: Any, num_shards: int) -> int:
+def _compute_shard(self, value: Any) -> int:
+    """Hash a value to determine its shard. Converts to string if needed."""
+    if isinstance(value, str):
+        s = value
+    else:
+        s = json.dumps(value, sort_keys=True)
     h = hashlib.blake2b(s.encode("utf-8"), digest_size=8).digest()
-    return int.from_bytes(h, "big") % num_shards
+    return int.from_bytes(h, "big") % self.num_shards
 ```
 
 The key field is specified per extractor (e.g., `types` uses `"name"` as the key).

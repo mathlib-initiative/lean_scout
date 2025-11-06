@@ -3,8 +3,8 @@ import sys
 import argparse
 from tqdm import tqdm
 
-from .schema import load_schema
-from .writer import ShardedParquetWriter, stream_json_lines
+from .utils import load_schema, stream_json_lines
+from .writer import ShardedParquetWriter
 
 def main():
     parser = argparse.ArgumentParser(description="Stream JSON lines to sharded Parquet files")
