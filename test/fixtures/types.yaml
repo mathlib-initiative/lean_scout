@@ -1,0 +1,81 @@
+description: "Test types extractor on Init module"
+source: "Init"
+
+# Exact matches: verify complete record equality
+exact_matches:
+  - name: "Nat.add"
+    module: "Init.Prelude"
+    type: "Nat → Nat → Nat"
+
+  - name: "Nat.zero"
+    module: "Init.Prelude"
+    type: "Nat"
+
+  - name: "Nat.succ"
+    module: "Init.Prelude"
+    type: "Nat → Nat"
+
+  - name: "List.nil"
+    module: "Init.Prelude"
+    type: "{α : Type u} → List α"
+
+  - name: "List.cons"
+    module: "Init.Prelude"
+    type: "{α : Type u} → α → List α → List α"
+
+  - name: "Option.none"
+    module: "Init.Prelude"
+    type: "{α : Type u} → Option α"
+
+  - name: "Option.some"
+    module: "Init.Prelude"
+    type: "{α : Type u} → α → Option α"
+
+# Property checks: verify specific properties without exact matching
+property_checks:
+  - name: "List.map"
+    properties:
+      module_contains: "Init"
+      type_contains: "List"
+      module_not_null: true
+
+  - name: "String.append"
+    properties:
+      module_contains: "Init"
+      type_contains: "String"
+      module_not_null: true
+
+  - name: "Array.size"
+    properties:
+      module_contains: "Init"
+      type_contains: "Array"
+      module_not_null: true
+
+  - name: "Bool.true"
+    properties:
+      module_not_null: true
+      type_contains: "Bool"
+
+  - name: "Bool.false"
+    properties:
+      module_not_null: true
+      type_contains: "Bool"
+
+# Count checks: verify dataset statistics
+count_checks:
+  min_records: 1000  # At least 1000 constants from Init
+
+  # Ensure these well-known constants exist
+  has_names:
+    - "Nat.add"
+    - "Nat.succ"
+    - "Nat.zero"
+    - "List.map"
+    - "List.cons"
+    - "List.nil"
+    - "Option.some"
+    - "Option.none"
+    - "String.append"
+    - "Bool.true"
+    - "Bool.false"
+    - "Array.size"

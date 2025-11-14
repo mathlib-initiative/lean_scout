@@ -1,0 +1,10 @@
+#!/bin/env bash
+
+set -e  # Exit on error
+
+echo ""
+echo "=== Running Python Unit Tests ==="
+uv run pytest test/test_types.py test/test_tactics.py -v
+
+echo ""
+echo "=== All Tests Passed ==="
