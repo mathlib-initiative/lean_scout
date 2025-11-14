@@ -31,6 +31,31 @@ def extract_types(imports: str, data_dir: Path) -> Path:
     return types_dir
 
 
+def extract_tactics(file_path: str, data_dir: Path) -> Path:
+    """
+    Run the tactics extractor and return the output directory.
+
+    Args:
+        file_path: Lean file to read (e.g., "LeanScoutTest/TacticsTest.lean")
+        data_dir: Base directory for output
+
+    Returns:
+        Path to the tactics subdirectory containing parquet files
+    """
+    subprocess.run(
+        ["lake", "run", "scout", "--command", "tactics", "--dataDir", str(data_dir), "--read", file_path],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    tactics_dir = data_dir / "tactics"
+    if not tactics_dir.exists():
+        raise RuntimeError(f"Tactics directory not created: {tactics_dir}")
+
+    return tactics_dir
+
+
 def load_types_dataset(types_dir: Path) -> Dataset:
     """
     Load a types dataset from parquet files.
@@ -44,6 +69,23 @@ def load_types_dataset(types_dir: Path) -> Dataset:
     parquet_files = glob.glob(str(types_dir / "*.parquet"))
     if not parquet_files:
         raise RuntimeError(f"No parquet files found in {types_dir}")
+
+    return Dataset.from_parquet(parquet_files)
+
+
+def load_tactics_dataset(tactics_dir: Path) -> Dataset:
+    """
+    Load a tactics dataset from parquet files.
+
+    Args:
+        tactics_dir: Directory containing part-*.parquet files
+
+    Returns:
+        Dataset object with tactics data
+    """
+    parquet_files = glob.glob(str(tactics_dir / "*.parquet"))
+    if not parquet_files:
+        raise RuntimeError(f"No parquet files found in {tactics_dir}")
 
     return Dataset.from_parquet(parquet_files)
 
@@ -151,3 +193,69 @@ def assert_record_not_null(actual: Dict[str, Any], field: str) -> None:
 
     if actual[field] is None:
         raise AssertionError(f"Field '{field}' is None")
+
+
+def get_records_by_tactic(dataset: Dataset, tactic: str) -> List[Dict[str, Any]]:
+    """
+    Query dataset for all records with a specific tactic.
+
+    Args:
+        dataset: Dataset to query
+        tactic: Tactic string to filter by (ppTac field)
+
+    Returns:
+        List of record dicts
+    """
+    matches = dataset.filter(lambda x: x['ppTac'] == tactic)
+    return [matches[i] for i in range(len(matches))]
+
+
+def get_records_by_tactic_contains(dataset: Dataset, substring: str) -> List[Dict[str, Any]]:
+    """
+    Query dataset for all records where ppTac contains a substring.
+
+    Args:
+        dataset: Dataset to query
+        substring: Substring to search for in ppTac
+
+    Returns:
+        List of record dicts
+    """
+    matches = dataset.filter(lambda x: substring in x['ppTac'])
+    return [matches[i] for i in range(len(matches))]
+
+
+def assert_tactic_exists(dataset: Dataset, tactic: str) -> None:
+    """
+    Assert that a specific tactic exists in the dataset.
+
+    Args:
+        dataset: Dataset to query
+        tactic: Tactic string to look for
+
+    Raises:
+        AssertionError: If tactic not found
+    """
+    matches = get_records_by_tactic(dataset, tactic)
+    if len(matches) == 0:
+        raise AssertionError(f"Tactic not found: {tactic}")
+
+
+def assert_tactic_contains(dataset: Dataset, substring: str, min_count: int = 1) -> None:
+    """
+    Assert that tactics containing a substring exist in the dataset.
+
+    Args:
+        dataset: Dataset to query
+        substring: Substring to search for
+        min_count: Minimum number of occurrences expected
+
+    Raises:
+        AssertionError: If not enough matches found
+    """
+    matches = get_records_by_tactic_contains(dataset, substring)
+    if len(matches) < min_count:
+        raise AssertionError(
+            f"Expected at least {min_count} tactics containing '{substring}', "
+            f"found {len(matches)}"
+        )

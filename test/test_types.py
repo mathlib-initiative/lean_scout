@@ -32,8 +32,8 @@ def types_init_dataset():
 
 @pytest.fixture(scope="module")
 def types_init_spec():
-    """Load the types_init.yaml test specification."""
-    spec_path = Path(__file__).parent / "fixtures" / "types_init.yaml"
+    """Load the types.yaml test specification."""
+    spec_path = Path(__file__).parent / "fixtures" / "types.yaml"
     with open(spec_path, 'r') as f:
         return yaml.safe_load(f)
 

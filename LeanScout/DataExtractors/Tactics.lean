@@ -12,7 +12,10 @@ namespace DataExtractors
 @[data_extractor tactics]
 public unsafe def tactics : DataExtractor where
   schema := .mk [
-    { name := "ppGoals", nullable := false, type := .list .string },
+    { name := "goals", nullable := false, type := .list <| .struct [
+      { name := "pp", nullable := false, type := .string },
+      { name := "usedConstants", nullable := false, type := .list .string }
+    ]},
     { name := "ppTac", nullable := false, type := .string },
   ]
   key := "ppTac"
@@ -23,12 +26,17 @@ public unsafe def tactics : DataExtractor where
       let some (.original ..) := info.stx.getHeadInfo? | return
       if tacFilter.contains info.stx.getKind then return
       let ppTac : String := toString info.stx.prettyPrint
-      let ppGoals : List String ← info.goalsBefore.mapM fun mvarId =>
+      let goals : List Json ← info.goalsBefore.mapM fun mvarId =>
         mvarId.withContext do
           let goal ← Lean.Meta.ppGoal mvarId
-          return toString goal
+          let t ← Lean.instantiateMVars <| .mvar mvarId
+          let consts := t.getUsedConstantsAsSet
+          return json% {
+            pp : $(toString goal),
+            usedConstants : $(consts.toList.map fun nm => s!"{nm}")
+          }
       handle.putStrLn <| Lean.Json.compress <| json% {
-        ppGoals : $(ppGoals),
+        goals : $(goals),
         ppTac : $(ppTac)
       }
   | _ => throw <| .userError "Unsupported Target"
