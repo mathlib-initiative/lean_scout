@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Lean Scout is a tool for creating datasets from Lean4 projects. It extracts structured data (types, tactics, subterms) from Lean code and stores them as sharded Parquet files for dataset creation.
+Lean Scout is a tool for creating datasets from Lean4 projects. It extracts structured data (types, tactics) from Lean code and stores them as sharded Parquet files for dataset creation.
 
 **Key Architecture**: Lean Scout uses a **bifurcated process model**:
 1. Lean code (in `LeanScout/`) extracts data from Lean environments and writes JSON lines to stdout
@@ -130,7 +130,6 @@ structure DataExtractor where
 Located in `LeanScout/DataExtractors/`:
 - **types**: Extracts constant names, modules, and types from Lean environments
 - **tactics**: Extracts tactic usage information
-- **subterms**: Extracts subterm structures from expressions
 
 ### Target System
 
