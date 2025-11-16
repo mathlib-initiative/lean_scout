@@ -77,7 +77,7 @@ def main : M UInt32 := do
     stdin := .piped
   }
   let (stdin, child) ← compressor.takeStdin
-  extractor.go stdin tgt
+  extractor.go (fun j => stdin.putStrLn j.compress) tgt
   child.wait
 
 end LeanScout.CLI

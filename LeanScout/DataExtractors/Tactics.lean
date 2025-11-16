@@ -19,7 +19,7 @@ public unsafe def tactics : DataExtractor where
     { name := "ppTac", nullable := false, type := .string },
   ]
   key := "ppTac"
-  go handle
+  go sink
   | .input tgt => discard <| tgt.withVisitM (α := Unit) (ctx? := none)
     (fun _ _ _ => return true) fun ctxInfo info _ _ => ctxInfo.runMetaM' {} do
       let .ofTacticInfo info := info | return
@@ -35,7 +35,7 @@ public unsafe def tactics : DataExtractor where
             pp : $(toString goal),
             usedConstants : $(consts.toList.map fun nm => s!"{nm}")
           }
-      handle.putStrLn <| Lean.Json.compress <| json% {
+      sink <| json% {
         goals : $(goals),
         ppTac : $(ppTac)
       }

@@ -70,6 +70,6 @@ See `LeanScout.DataExtractors.types` for an example.
 structure DataExtractor where
   schema : Schema
   key : String
-  go : IO.FS.Handle → Target → IO Unit
+  go : (Json → IO Unit) → Target → IO Unit
 
 end LeanScout
