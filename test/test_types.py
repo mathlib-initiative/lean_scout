@@ -15,7 +15,7 @@ from helpers import (
 
 
 @pytest.fixture(scope="module")
-def types_init_dataset():
+def types_dataset():
     """
     Extract types from Init module once and reuse for all tests.
 
@@ -31,29 +31,29 @@ def types_init_dataset():
 
 
 @pytest.fixture(scope="module")
-def types_init_spec():
+def types_spec():
     """Load the types.yaml test specification."""
     spec_path = Path(__file__).parent / "fixtures" / "types.yaml"
     with open(spec_path, 'r') as f:
         return yaml.safe_load(f)
 
 
-def test_types_init_exact_matches(types_init_dataset, types_init_spec):
+def test_types_exact_matches(types_dataset, types_spec):
     """
     Test exact record matching against specification.
 
     Verifies that specific constants have exactly the expected name, module,
     and type values as defined in the YAML spec.
     """
-    for expected in types_init_spec['exact_matches']:
+    for expected in types_spec['exact_matches']:
         name = expected['name']
-        actual = get_record_by_name(types_init_dataset, name)
+        actual = get_record_by_name(types_dataset, name)
 
         assert actual is not None, f"Record not found: {name}"
         assert_record_exact_match(actual, expected)
 
 
-def test_types_init_properties(types_init_dataset, types_init_spec):
+def test_types_properties(types_dataset, types_spec):
     """
     Test property-based assertions.
 
@@ -61,9 +61,9 @@ def test_types_init_properties(types_init_dataset, types_init_spec):
     module contains a substring, type contains a keyword) without requiring
     exact matches.
     """
-    for check in types_init_spec['property_checks']:
+    for check in types_spec['property_checks']:
         name = check['name']
-        actual = get_record_by_name(types_init_dataset, name)
+        actual = get_record_by_name(types_dataset, name)
 
         assert actual is not None, f"Record not found: {name}"
 
@@ -79,32 +79,32 @@ def test_types_init_properties(types_init_dataset, types_init_spec):
             assert_record_not_null(actual, 'module')
 
 
-def test_types_init_count_min_records(types_init_dataset, types_init_spec):
+def test_types_count_min_records(types_dataset, types_spec):
     """
     Test minimum record count.
 
     Verifies that the dataset contains at least the expected number of records.
     """
-    counts = types_init_spec['count_checks']
+    counts = types_spec['count_checks']
     min_records = counts['min_records']
 
-    actual_count = len(types_init_dataset)
+    actual_count = len(types_dataset)
     assert actual_count >= min_records, (
         f"Expected at least {min_records} records, got {actual_count}"
     )
 
 
-def test_types_init_has_required_names(types_init_dataset, types_init_spec):
+def test_types_has_required_names(types_dataset, types_spec):
     """
     Test that all required constants exist.
 
     Verifies that specific well-known constants are present in the dataset.
     """
-    counts = types_init_spec['count_checks']
+    counts = types_spec['count_checks']
     required_names = set(counts['has_names'])
 
     # Build set of all names in dataset
-    dataset_names = set(types_init_dataset['name'])
+    dataset_names = set(types_dataset['name'])
 
     # Check for missing names
     missing_names = required_names - dataset_names
@@ -114,17 +114,17 @@ def test_types_init_has_required_names(types_init_dataset, types_init_spec):
     )
 
 
-def test_types_init_schema(types_init_dataset):
+def test_types_schema(types_dataset):
     """
     Test that the dataset has the expected schema.
 
     Verifies that the types extractor produces records with the correct fields.
     """
     # Check that dataset is not empty
-    assert len(types_init_dataset) > 0, "Dataset is empty"
+    assert len(types_dataset) > 0, "Dataset is empty"
 
     # Get the first record to inspect schema
-    first_record = types_init_dataset[0]
+    first_record = types_dataset[0]
 
     # Verify expected fields exist
     assert 'name' in first_record, "Missing 'name' field"
