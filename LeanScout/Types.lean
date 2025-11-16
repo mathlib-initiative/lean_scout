@@ -48,13 +48,12 @@ inductive Target where
 
 /--
 A `DataExtractor` bundles together the following data:
-1. The schema `schema : Arrow.Schem` of the data being generated.
+1. The schema `schema : Schema` of the data being generated.
 2. A `key : String`, which should correspond to a key in `schema`.
   This is used for computing the shard id for the given datapoint.
-3. A function `go : IO.FS.Hansle -> Target -> IO Unit` which handles the data extraction.
+3. A function `go : (Json → IO Unit) -> Target -> IO Unit` which handles the data extraction.
 
-It is expected that `go handle tgt` will write json lines (newline delimited)
-to `handle`, whose schema should match the given `schema`.
+It is expected that `go sink tgt` will use `sink` to register a datapoint to be saved.
 
 In order to activate a data extractor, it must be tagged with the `data_extractor`
 attribute. The syntax for this is
