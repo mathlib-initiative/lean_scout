@@ -16,7 +16,7 @@ def stream_json_lines(input_stream) -> Iterator[dict]:
             continue  # skip malformed lines
 
 
-def datatype_from_json(type_obj: dict):
+def datatype_from_json(type_obj: dict) -> pa.DataType:
     """Convert JSON type object to PyArrow DataType."""
     datatype = type_obj.get("datatype")
     if datatype == "bool":
@@ -37,9 +37,11 @@ def datatype_from_json(type_obj: dict):
         children = type_obj.get("children", [])
         fields = [field_from_json(child) for child in children]
         return pa.struct(fields)
+    else:
+        raise ValueError(f"Unknown datatype: {datatype}")
 
 
-def field_from_json(field_obj: dict):
+def field_from_json(field_obj: dict) -> pa.Field:
     """Convert JSON field object to PyArrow Field."""
     name = field_obj.get("name")
     nullable = field_obj.get("nullable", True)
@@ -48,13 +50,13 @@ def field_from_json(field_obj: dict):
     return pa.field(name, datatype, nullable=nullable)
 
 
-def schema_from_json(schema_obj: dict):
+def schema_from_json(schema_obj: dict) -> pa.Schema:
     """Convert JSON schema object to PyArrow Schema."""
     fields = [field_from_json(field) for field in schema_obj.get("fields", [])]
     return pa.schema(fields)
 
 
-def deserialize_schema(json_str: str):
+def deserialize_schema(json_str: str) -> pa.Schema:
     """Deserialize PyArrow schema from JSON string."""
     schema_obj = json.loads(json_str)
     return schema_from_json(schema_obj)

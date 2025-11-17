@@ -9,7 +9,6 @@ from helpers import (
     load_tactics_dataset,
     get_records_by_tactic,
     get_records_by_tactic_contains,
-    assert_tactic_exists,
     assert_tactic_contains,
 )
 
@@ -71,7 +70,6 @@ def test_tactics_contains(tactics_test_dataset, tactics_test_spec):
     for check in tactics_test_spec['tactic_contains']:
         substring = check['substring']
         min_count = check['min_count']
-        description = check.get('description', '')
 
         assert_tactic_contains(tactics_test_dataset, substring, min_count)
 
