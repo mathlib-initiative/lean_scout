@@ -11,11 +11,26 @@ To use this tool, you must have:
 ## Basic usage
 
 To use Lean Scout, add this repo as a dependency in your Lean4 project.
+
+### Extract from imports (single subprocess)
 ```bash
 lake run scout --command types --imports Lean
 ```
 
 This will run the `types` command to extract types of constants from an environment created by importing the `Lean` module.
+
+### Extract from files (parallel subprocesses)
+```bash
+# Single file
+lake run scout --command tactics --read MyFile.lean
+
+# Multiple files in parallel (one subprocess per file)
+lake run scout --command tactics --read File1.lean File2.lean File3.lean --parallel 4
+
+# Read file list from a file (useful for many files)
+lake build LeanScout:module_paths  # Creates file with all module paths
+lake run scout --command tactics --read-list module_paths --parallel 8
+```
 
 If you have Lean Scout as a dependency with `Mathlib` as another dependency, you can similarly run:
 ```bash

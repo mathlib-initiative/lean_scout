@@ -4,10 +4,38 @@ import argparse
 import subprocess
 import json
 from pathlib import Path
+from typing import List
 
 from .utils import deserialize_schema
 from .writer import ShardedParquetWriter
 from .orchestrator import Orchestrator
+
+
+def read_file_list(file_list_path: str) -> List[str]:
+    """
+    Read a list of file paths from a file (one per line).
+
+    Args:
+        file_list_path: Path to file containing file paths
+
+    Returns:
+        List of file paths (stripped of whitespace, empty lines ignored)
+
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        RuntimeError: If file is empty
+    """
+    path = Path(file_list_path)
+    if not path.exists():
+        raise FileNotFoundError(f"File list not found: {file_list_path}")
+
+    with open(path, 'r') as f:
+        lines = [line.strip() for line in f if line.strip()]
+
+    if not lines:
+        raise RuntimeError(f"File list is empty: {file_list_path}")
+
+    return lines
 
 
 def get_schema(command: str, scout_path: Path) -> str:
@@ -83,7 +111,12 @@ Examples:
     )
     target_group.add_argument(
         "--read",
-        help="Lean file to read and process"
+        nargs='+',
+        help="Lean file(s) to read and process. Multiple files will be processed in parallel."
+    )
+    target_group.add_argument(
+        "--read-list",
+        help="File containing list of Lean files to read (one per line). Files will be processed in parallel."
     )
 
     # Optional arguments
@@ -128,8 +161,8 @@ Examples:
         sys.exit(result.returncode)
 
     # Validate that target is specified for all other commands
-    if not args.imports and not args.read:
-        parser.error("one of the arguments --imports --read is required (except for 'extractors' command)")
+    if not args.imports and not args.read and not args.read_list:
+        parser.error("one of the arguments --imports --read --read-list is required (except for 'extractors' command)")
 
     # Convert paths
     scout_path = Path(args.scoutPath).resolve()
@@ -148,6 +181,15 @@ Examples:
     base_path.mkdir(parents=True, exist_ok=True)
 
     try:
+        # Determine read files list
+        read_files = None
+        if args.read:
+            read_files = args.read
+        elif args.read_list:
+            sys.stderr.write(f"Reading file list from: {args.read_list}\n")
+            read_files = read_file_list(args.read_list)
+            sys.stderr.write(f"Found {len(read_files)} files to process\n")
+
         # Query schema from Lean
         sys.stderr.write(f"Querying schema for command '{args.command}'...\n")
         schema_json = get_schema(args.command, scout_path)
@@ -174,7 +216,7 @@ Examples:
             scout_path=scout_path,
             writer=writer,
             imports=args.imports,
-            read_file=args.read,
+            read_files=read_files,
             num_workers=args.parallel,
         )
 

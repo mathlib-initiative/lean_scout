@@ -27,6 +27,8 @@ lake build
 ```
 
 ### Running Data Extraction
+
+**Imports target (single subprocess)**:
 ```bash
 # Extract types from Lean standard library
 lake run scout --command types --imports Lean
@@ -40,6 +42,23 @@ lake run scout --command types --dataDir $HOME/storage --imports Mathlib
 # Control sharding (default: 128 shards)
 lake run scout --command types --numShards 32 --imports Lean
 ```
+
+**Read target (parallel subprocesses)**:
+```bash
+# Extract from single file
+lake run scout --command tactics --read MyFile.lean
+
+# Extract from multiple files in parallel (one subprocess per file)
+lake run scout --command tactics --read File1.lean File2.lean File3.lean --parallel 4
+
+# Extract from file list (useful for processing entire libraries)
+lake build LeanScout:module_paths  # Generates module_paths with all file paths
+lake run scout --command tactics --read-list module_paths --parallel 8
+```
+
+**Key difference**:
+- `--imports`: Single Lean subprocess processes entire import closure
+- `--read` / `--read-list`: One Lean subprocess per file, enabling true parallel extraction
 
 ### Testing
 ```bash
@@ -189,8 +208,13 @@ class Orchestrator:
         """Stream JSON lines from stdout to ShardedParquetWriter."""
 ```
 
-**Current Implementation**: Sequential (single Lean subprocess)
-**Future Enhancement**: Parallel execution with multiple workers (Phase 6)
+**Implementation**:
+- **Imports target**: Sequential (single Lean subprocess)
+- **Read target (multiple files)**: Parallel with `ThreadPoolExecutor`
+  - One Lean subprocess spawned per file
+  - Controlled by `--parallel N` flag (defaults to min(num_files, num_workers))
+  - All subprocesses write to shared thread-safe `ShardedParquetWriter`
+  - Progress reporting shows completion status for each file
 
 ### Sharding Strategy
 
@@ -217,8 +241,18 @@ The key field is specified per extractor (e.g., `types` uses `"name"` as the key
 - `LeanScout` library (default target)
 - `lean_scout` executable (from `Main.lean`)
 - `scout` script: wraps `uv run lean-scout` (Python CLI) with `--scoutPath` automatically set to the Scout dependency root
+- `module_paths` library facet: generates a file containing all module file paths (one per line)
 
 **Important**: When Lean Scout is used as a dependency in another project, use `lake run scout` (which invokes the script). The script calls the Python CLI which orchestrates Lean subprocess execution. The `--scoutPath` is automatically passed to ensure correct package resolution.
+
+**Parallel extraction workflow**:
+```bash
+# Generate list of all module file paths
+lake build LeanScout:module_paths
+
+# Extract from all modules in parallel
+lake run scout --command tactics --read-list module_paths --parallel 8
+```
 
 ### Test Infrastructure
 
@@ -229,7 +263,10 @@ The test suite consists of:
    - Validates roundtrip through Python's schema parser
    - Tests all data types: bool, nat, int, float, string, list, struct
 
-2. **Python Unit Tests** (`test/test_types.py`):
+2. **Python Unit Tests**:
+   - `test/test_types.py`: Tests types extractor with YAML-based specifications
+   - `test/test_tactics.py`: Tests tactics extractor with YAML-based specifications
+   - `test/test_parallel.py`: Tests parallel file extraction (new!)
    - Uses pytest framework with YAML-based test specifications
    - Extracts data once per test session (module-scoped fixture)
    - Three types of assertions:
