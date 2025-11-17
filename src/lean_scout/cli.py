@@ -146,7 +146,9 @@ Examples:
         "--parallel",
         type=int,
         default=1,
-        help="Number of parallel workers (default: 1, currently only 1 is supported)"
+        help="Number of parallel workers for file extraction (default: 1). "
+             "Only applies to --read/--read-list with multiple files. "
+             "Actual workers used: min(num_files, --parallel)"
     )
 
     args = parser.parse_args()
