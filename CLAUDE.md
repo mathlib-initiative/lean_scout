@@ -6,11 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Lean Scout is a tool for creating datasets from Lean4 projects. It extracts structured data (types, tactics) from Lean code and stores them as sharded Parquet files for dataset creation.
 
-**Key Architecture**: Lean Scout uses a **bifurcated process model**:
-1. Lean code (in `LeanScout/`) extracts data from Lean environments and writes JSON lines to stdout
-2. Python package (`lean_scout`) reads JSON from stdin and writes sharded Parquet files to disk
+**Key Architecture**: Lean Scout uses a **Python-first bifurcated process model**:
+1. Python orchestrator (in `lean_scout.cli`) manages Lean subprocess(es) and coordinates data writing
+2. Lean code (in `LeanScout/`) extracts data from Lean environments and outputs JSON lines to stdout
+3. Python reads JSON from subprocess stdout and writes to a shared pool of Parquet writers
 
-This design keeps Lean focused on extraction and Python focused on efficient data storage.
+This design enables **parallel extraction** where multiple Lean processes can run simultaneously while sharing efficient Parquet writers for optimal performance.
 
 ## Requirements
 
@@ -149,20 +150,47 @@ Schema definition uses a custom Arrow-compatible type system:
 ### Data Flow
 
 1. User runs: `lake run scout --command types --imports Lean`
-2. `Main.lean` parses arguments and builds `Options`
-3. Main spawns `uv run python -m lean_scout` subprocess with schema JSON, shard config, and base path
-4. Extractor's `go` function writes JSON lines to subprocess stdin
-5. Python package deserializes JSON, hashes the key field to compute shard, batches rows, and writes Parquet files
-6. Output: `<dataDir>/<command>/part-NNN.parquet` files (128 shards by default)
+2. Lake script invokes: `uv run lean-scout --scoutPath <path> --command types --imports Lean`
+3. Python CLI (`lean_scout.cli`) parses arguments and queries schema: `lake exe lean_scout --command types --schema`
+4. Python creates `ShardedParquetWriter` with the schema and output configuration
+5. Python spawns Lean subprocess: `lake exe lean_scout --command types --imports Lean`
+6. Lean's `Main.lean` runs the extractor, which outputs JSON lines to stdout
+7. Python's `Orchestrator` reads JSON from subprocess stdout and feeds to `ShardedParquetWriter`
+8. `ShardedParquetWriter` hashes the key field, batches rows, and writes Parquet files
+9. Output: `<dataDir>/<command>/part-NNN.parquet` files (128 shards by default)
 
 ### Python Package Structure
 
 The Python code is organized as a proper package:
 - `src/lean_scout/`: Main package directory
   - `__init__.py`: Exports public API
+  - `cli.py`: Main CLI entry point (orchestrates extraction)
+  - `orchestrator.py`: Manages Lean subprocess execution
+  - `writer.py`: Thread-safe sharded Parquet writing with batching
   - `utils.py`: Utility functions (schema parsing, JSON streaming)
-  - `writer.py`: Sharded Parquet writing with batching
-  - `__main__.py`: CLI entry point
+  - `__main__.py`: Legacy CLI entry point (deprecated, for backward compatibility)
+
+### Orchestrator
+
+The `Orchestrator` class (in `src/lean_scout/orchestrator.py`) manages Lean subprocess execution:
+
+```python
+class Orchestrator:
+    def __init__(self, command, scout_path, writer, imports=None, read_file=None, num_workers=1):
+        """Initialize with shared writer and extraction parameters."""
+
+    def run(self) -> dict:
+        """Spawn Lean subprocess, read JSON output, feed to writer, return stats."""
+
+    def _spawn_lean_subprocess(self) -> subprocess.Popen:
+        """Spawn: lake exe lean_scout --command <cmd> --imports/--read <target>"""
+
+    def _process_subprocess_output(self, process):
+        """Stream JSON lines from stdout to ShardedParquetWriter."""
+```
+
+**Current Implementation**: Sequential (single Lean subprocess)
+**Future Enhancement**: Parallel execution with multiple workers (Phase 6)
 
 ### Sharding Strategy
 
@@ -180,15 +208,17 @@ def _compute_shard(self, value: Any) -> int:
 
 The key field is specified per extractor (e.g., `types` uses `"name"` as the key).
 
+**Thread Safety**: The `ShardedParquetWriter` is thread-safe using a `threading.Lock()` to protect shared state (buffers, writers, counts). This enables future parallel extraction where multiple threads can write to the same writer pool concurrently.
+
 ### Lake Configuration
 
 `lakefile.lean` defines:
 - `lean_scout` package with experimental module support
 - `LeanScout` library (default target)
 - `lean_scout` executable (from `Main.lean`)
-- `scout` script: wraps `lake exe lean_scout` with `--scoutPath` automatically set to the Scout dependency root
+- `scout` script: wraps `uv run lean-scout` (Python CLI) with `--scoutPath` automatically set to the Scout dependency root
 
-**Important**: When Lean Scout is used as a dependency in another project, use `lake run scout` (which invokes the script), not `lake exe lean_scout` directly. The script ensures the correct `--scoutPath` is passed.
+**Important**: When Lean Scout is used as a dependency in another project, use `lake run scout` (which invokes the script). The script calls the Python CLI which orchestrates Lean subprocess execution. The `--scoutPath` is automatically passed to ensure correct package resolution.
 
 ### Test Infrastructure
 

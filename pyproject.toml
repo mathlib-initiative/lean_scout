@@ -12,7 +12,8 @@ dependencies = [
 ]
 
 [project.scripts]
-lean-scout-writer = "lean_scout.__main__:main"
+lean-scout = "lean_scout.cli:main"
+lean-scout-writer = "lean_scout.__main__:main"  # Legacy entry point (deprecated)
 
 [build-system]
 requires = ["hatchling"]

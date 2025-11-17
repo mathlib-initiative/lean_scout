@@ -49,20 +49,27 @@ inductive Target where
 /--
 A `DataExtractor` bundles together the following data:
 1. The schema `schema : Schema` of the data being generated.
-2. A `key : String`, which should correspond to a key in `schema`.
-  This is used for computing the shard id for the given datapoint.
+2. A `key : String`, which should correspond to a field name in `schema`.
+  This is used by the Python orchestrator for computing the shard id for each datapoint.
 3. A function `go : (Json → IO Unit) -> Target -> IO Unit` which handles the data extraction.
 
-It is expected that `go sink tgt` will use `sink` to register a datapoint to be saved.
+The `go sink tgt` function writes extracted data by calling `sink` with JSON objects.
+Each call to `sink j` writes a JSON line to stdout, which is consumed by the Python
+orchestrator and written to sharded Parquet files.
 
 In order to activate a data extractor, it must be tagged with the `data_extractor`
-attribute. The syntax for this is
+attribute. The syntax for this is:
 ```
 @[data_extractor cmd]
 def d : DataExtractor := ...
 ```
 Assuming `d` is imported in `Main.lean`, it will then be possible to
 use the CLI to call this data extractor with the command `cmd`.
+
+Architecture:
+  Lean extracts data and outputs JSON lines to stdout.
+  Python orchestrator spawns Lean subprocess(es), reads JSON from stdout,
+  and writes to a shared pool of Parquet writers for efficient parallel extraction.
 
 See `LeanScout.DataExtractors.types` for an example.
 -/

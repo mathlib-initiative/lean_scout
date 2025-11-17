@@ -62,8 +62,12 @@ dataset = load_dataset("parquet", data_dir="types", split="train")
 
 # How does LeanScout work?
 
-At a high level, LeanScout works by running a python script `main.py` as a subprocess, and sending the data to this script via stdio.
-The python script is responsible for actually writing the data to disk, organized as parquet shards. 
+At a high level, LeanScout uses a **Python-first architecture**:
+1. Python orchestrates one or more Lean subprocess(es) that extract data and output JSON lines to stdout
+2. The Python orchestrator reads JSON from each subprocess and writes to a shared pool of Parquet writers
+3. This design enables **parallel extraction** where multiple Lean processes can run simultaneously while sharing efficient Parquet writers
+
+The data is written to disk organized as sharded Parquet files for efficient storage and loading. 
 
 # Data Extractors
 
@@ -76,10 +80,10 @@ structure DataExtractor where
   go : IO.FS.Handle → Target → IO Unit 
 ```
 
-Here, 
-- `schema` is the schema of the data being stored. This is serialized into json, and deserialized by the python script responsible for actually storing the data on disk.
-- `key` is the key that will be used to compute the shard associated with a given datapoint.
-- `go` is the main function that communicates with the python script. The `IO.FS.Handle` parameter is the stdin of the data storing python subprocess, and the `Target` is the target that is being processed.
+Here,
+- `schema` is the schema of the data being stored. This is serialized to JSON and queried by the Python orchestrator before extraction begins.
+- `key` is the field name that will be used to compute the shard associated with a given datapoint (via hashing).
+- `go` is the main function that extracts data and writes JSON lines to stdout. The `IO.FS.Handle` parameter writes to stdout, and the `Target` is the target that is being processed (either imports or a file to read).
 
 When declaring a new data extractor, it should be tagged with the `data_extractor` attribute.
 The syntax for this is `@[data_extractor cmd]`, where `cmd` is the command that will be used to call the data extractor being defined. 
