@@ -3,6 +3,7 @@ import sys
 import argparse
 import subprocess
 import json
+import os
 from pathlib import Path
 from typing import List
 
@@ -153,6 +154,18 @@ Examples:
 
     args = parser.parse_args()
 
+    # Validate --parallel flag
+    # Use number of CPU cores as maximum (default to 32 if can't determine)
+    MAX_WORKERS = os.cpu_count() or 32
+    if args.parallel < 1:
+        parser.error(f"--parallel must be at least 1, got {args.parallel}")
+    if args.parallel > MAX_WORKERS:
+        sys.stderr.write(
+            f"Warning: --parallel {args.parallel} exceeds number of CPU cores ({MAX_WORKERS}). "
+            f"Using {MAX_WORKERS} instead.\n"
+        )
+        args.parallel = MAX_WORKERS
+
     # Handle special "extractors" command early (before validation)
     if args.command == "extractors":
         scout_path = Path(args.scoutPath).resolve()
@@ -197,11 +210,9 @@ Examples:
         schema_json = get_schema(args.command, scout_path)
         schema = deserialize_schema(schema_json)
 
-        # Get the key field from the schema metadata
-        # We need to query this from Lean as well
-        # For now, we'll pass it in the schema JSON
+        # Extract shard key from schema metadata
         schema_obj = json.loads(schema_json)
-        key = schema_obj.get("key", "name")  # Default to "name" if not specified
+        key = schema_obj.get("key", "name")
 
         # Create writer
         writer = ShardedParquetWriter(

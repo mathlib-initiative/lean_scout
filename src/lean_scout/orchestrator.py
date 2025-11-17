@@ -1,8 +1,6 @@
 """Orchestrates Lean subprocess execution and coordinates data writing."""
 import subprocess
 import sys
-import json
-import os
 from typing import Optional, List
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -107,19 +105,28 @@ class Orchestrator:
                         for file_path in self.read_files
                     }
 
-                    # Wait for completion and handle errors
+                    # Wait for completion and collect errors
                     completed = 0
+                    failed = 0
+                    errors = []
                     for future in as_completed(future_to_file):
                         file_path = future_to_file[future]
                         try:
                             future.result()
                             completed += 1
-                            sys.stderr.write(f"  [{completed}/{num_files}] Completed: {file_path}\n")
+                            sys.stderr.write(f"  [{completed + failed}/{num_files}] Completed: {file_path}\n")
                         except Exception as exc:
-                            raise RuntimeError(
-                                f"File processing failed: {file_path}\n"
-                                f"Error: {exc}"
-                            )
+                            failed += 1
+                            error_msg = f"{file_path}: {exc}"
+                            errors.append(error_msg)
+                            sys.stderr.write(f"  [{completed + failed}/{num_files}] Failed: {error_msg}\n")
+
+                    # Raise error if any files failed
+                    if errors:
+                        raise RuntimeError(
+                            f"Failed to process {failed}/{num_files} files:\n" +
+                            "\n".join(f"  - {err}" for err in errors)
+                        )
 
         # Close writer and get statistics
         return self.writer.close()
@@ -152,16 +159,16 @@ class Orchestrator:
             args.extend(["--read", self.read_files[0]])
 
         # Spawn subprocess
-        # stdout: piped (we read JSON from here)
-        # stderr: inherited (error messages go to user's terminal)
-        # stdin: closed (Lean doesn't need input)
+        # stdout: piped for JSON output
+        # stderr: captured for error reporting
+        # stdin: closed (not needed)
         process = subprocess.Popen(
             args,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,  # Capture stderr for error reporting
+            stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             text=True,
-            bufsize=1,  # Line buffered
+            bufsize=1,
             cwd=self.scout_path,
         )
 
