@@ -187,7 +187,6 @@ The Python code is organized as a proper package:
   - `orchestrator.py`: Manages Lean subprocess execution
   - `writer.py`: Thread-safe sharded Parquet writing with batching
   - `utils.py`: Utility functions (schema parsing, JSON streaming)
-  - `__main__.py`: Legacy CLI entry point (deprecated, for backward compatibility)
 
 ### Orchestrator
 
