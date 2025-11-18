@@ -39,13 +39,13 @@ def read_file_list(file_list_path: str) -> List[str]:
     return lines
 
 
-def query_library_paths(library: str, scout_path: Path) -> List[str]:
+def query_library_paths(library: str, root_path: Path) -> List[str]:
     """
     Query module paths for a library using lake query.
 
     Args:
         library: Library name (e.g., "LeanScoutTest", "Mathlib")
-        scout_path: Path to Scout package root
+        root_path: Path to package root
 
     Returns:
         List of file paths from the library
@@ -55,7 +55,7 @@ def query_library_paths(library: str, scout_path: Path) -> List[str]:
     """
     result = subprocess.run(
         ["lake", "query", "-q", f"{library}:module_paths"],
-        cwd=scout_path,
+        cwd=root_path,
         capture_output=True,
         text=True,
     )
@@ -76,13 +76,13 @@ def query_library_paths(library: str, scout_path: Path) -> List[str]:
     return lines
 
 
-def get_schema(command: str, scout_path: Path) -> str:
+def get_schema(command: str, root_path: Path) -> str:
     """
     Query Lean for the schema of a given extractor command.
 
     Args:
         command: Extractor command (e.g., "types", "tactics")
-        scout_path: Path to Scout package root
+        root_path: Path to package root
 
     Returns:
         Schema JSON string
@@ -91,8 +91,8 @@ def get_schema(command: str, scout_path: Path) -> str:
         RuntimeError: If schema query fails
     """
     result = subprocess.run(
-        ["lake", "exe", "lean_scout", "--scoutPath", str(scout_path), "--command", command, "--schema"],
-        cwd=scout_path,
+        ["lake", "exe", "lean_scout", "--command", command, "--schema"],
+        cwd=root_path,
         capture_output=True,
         text=True,
     )
@@ -183,9 +183,9 @@ Examples:
         help="Rows per batch before flushing (default: 1024)"
     )
     parser.add_argument(
-        "--scoutPath",
+        "--rootPath",
         default=".",
-        help="Scout package root directory (default: current directory)"
+        help="Package root directory (default: current directory)"
     )
     parser.add_argument(
         "--parallel",
@@ -212,10 +212,10 @@ Examples:
 
     # Handle special "extractors" command early (before validation)
     if args.command == "extractors":
-        scout_path = Path(args.scoutPath).resolve()
+        root_path = Path(args.rootPath).resolve()
         result = subprocess.run(
-            ["lake", "exe", "lean_scout", "--scoutPath", str(scout_path), "--command", "extractors"],
-            cwd=scout_path,
+            ["lake", "exe", "lean_scout", "--command", "extractors"],
+            cwd=root_path,
         )
         sys.exit(result.returncode)
 
@@ -224,7 +224,7 @@ Examples:
         parser.error("one of the arguments --imports --read --read-list --library is required (except for 'extractors' command)")
 
     # Convert paths
-    scout_path = Path(args.scoutPath).resolve()
+    root_path = Path(args.rootPath).resolve()
     data_dir = Path(args.dataDir).resolve()
 
     # Determine output path
@@ -250,12 +250,12 @@ Examples:
             sys.stderr.write(f"Found {len(read_files)} files to process\n")
         elif args.library:
             sys.stderr.write(f"Querying module paths for library: {args.library}\n")
-            read_files = query_library_paths(args.library, scout_path)
+            read_files = query_library_paths(args.library, root_path)
             sys.stderr.write(f"Found {len(read_files)} files to process\n")
 
         # Query schema from Lean
         sys.stderr.write(f"Querying schema for command '{args.command}'...\n")
-        schema_json = get_schema(args.command, scout_path)
+        schema_json = get_schema(args.command, root_path)
         schema = deserialize_schema(schema_json)
 
         # Extract shard key from schema metadata
@@ -274,7 +274,7 @@ Examples:
         # Create orchestrator
         orchestrator = Orchestrator(
             command=args.command,
-            scout_path=scout_path,
+            root_path=root_path,
             writer=writer,
             imports=args.imports,
             read_files=read_files,

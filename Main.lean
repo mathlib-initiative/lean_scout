@@ -9,7 +9,6 @@ open Lean
 abbrev Command := String
 
 structure Options where
-  scoutPath : System.FilePath := "."
   target : Option Target := none
   command : Option Command := none
   schemaOnly : Bool := false
@@ -30,7 +29,6 @@ def getSchemaOnly : M Bool := read <&> Options.schemaOnly
 
 def processArgs (args : List String) (opts : Options) : Options :=
   match args with
-  | "--scoutPath" :: path :: args => processArgs args { opts with scoutPath := path }
   | "--command" :: command :: args => processArgs args { opts with command := some command }
   | "--schema" :: args => processArgs args { opts with schemaOnly := true }
   | "--read" :: [path] => { opts with target := some <| .read path {} }

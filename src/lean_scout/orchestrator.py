@@ -15,7 +15,7 @@ class Orchestrator:
     def __init__(
         self,
         command: str,
-        scout_path: Path,
+        root_path: Path,
         writer: ShardedParquetWriter,
         imports: Optional[List[str]] = None,
         read_files: Optional[List[str]] = None,
@@ -26,14 +26,14 @@ class Orchestrator:
 
         Args:
             command: Extractor command (e.g., "types", "tactics")
-            scout_path: Path to Scout package root directory
+            root_path: Path to package root directory
             writer: Shared ShardedParquetWriter instance
             imports: List of modules to import (for .imports target)
             read_files: List of Lean files to read (for .input target, parallel processing)
             num_workers: Number of parallel Lean workers (default: 1, sequential)
         """
         self.command = command
-        self.scout_path = Path(scout_path)
+        self.root_path = Path(root_path)
         self.writer = writer
         self.imports = imports
         self.read_files = read_files
@@ -144,7 +144,6 @@ class Orchestrator:
         # Build command line arguments
         args = [
             "lake", "exe", "lean_scout",
-            "--scoutPath", str(self.scout_path),
             "--command", self.command,
         ]
 
@@ -169,7 +168,7 @@ class Orchestrator:
             stdin=subprocess.DEVNULL,
             text=True,
             bufsize=1,
-            cwd=self.scout_path,
+            cwd=self.root_path,
         )
 
         return process
