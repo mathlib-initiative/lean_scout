@@ -1,0 +1,11 @@
+name = "lean_scout_test_project"
+reservoir = false
+version = "0.1.0"
+defaultTargets = ["LeanScoutTestProject"]
+
+[[lean_lib]]
+name = "LeanScoutTestProject"
+
+[[require]]
+name = "lean_scout"
+path = ".."

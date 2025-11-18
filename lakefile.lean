@@ -24,20 +24,24 @@ lean_exe shake where
   supportInterpreter := true
 
 
-library_facet module_paths (lib) : System.FilePath := do
+library_facet module_paths (lib) : Array System.FilePath := do
   let modules ← (← lib.modules.fetch).await
-  let path : System.FilePath := "module_paths"
-  let handle ← IO.FS.Handle.mk path .write
+  let mut out := #[]
   for module in modules do
-    handle.putStrLn <| module.filePath module.pkg.rootDir "lean" |>.toString
-  return pure path
+    out := out.push <| module.filePath module.pkg.rootDir "lean"
+  return pure out
 
 script scout (args) := do
   let workspace ← getWorkspace
   let some scout := workspace.findPackage? `lean_scout |
     throw <| .userError "Failed to find lean_scout dependency"
+  let rootPath : System.FilePath ← IO.FS.realPath workspace.root.rootDir
   let child ← IO.Process.spawn {
-    cmd := "lake"
-    args := #["exe", "lean_scout", "--scoutPath", scout.rootDir.toString] ++ args.toArray
+    cmd := "uv"
+    cwd := scout.rootDir
+    args := #[
+      "run",
+      "lean-scout",
+      "--rootPath", rootPath.toString] ++ args.toArray
   }
   child.wait

@@ -1,7 +1,7 @@
 """Helper utilities for testing data extractors."""
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from datasets import Dataset
 import glob
 
@@ -56,6 +56,34 @@ def extract_tactics(file_path: str, data_dir: Path) -> Path:
     return tactics_dir
 
 
+def extract_from_library(command: str, library: str, data_dir: Path, parallel: int = 1) -> Path:
+    """
+    Run an extractor on all modules from a library using --library.
+
+    Args:
+        command: Extractor command (e.g., "types", "tactics")
+        library: Library name (e.g., "LeanScoutTest", "Mathlib")
+        data_dir: Base directory for output
+        parallel: Number of parallel workers
+
+    Returns:
+        Path to the command subdirectory containing parquet files
+    """
+    subprocess.run(
+        ["lake", "run", "scout", "--command", command, "--dataDir", str(data_dir),
+         "--library", library, "--parallel", str(parallel)],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    output_dir = data_dir / command
+    if not output_dir.exists():
+        raise RuntimeError(f"{command.capitalize()} directory not created: {output_dir}")
+
+    return output_dir
+
+
 def load_types_dataset(types_dir: Path) -> Dataset:
     """
     Load a types dataset from parquet files.
@@ -70,7 +98,8 @@ def load_types_dataset(types_dir: Path) -> Dataset:
     if not parquet_files:
         raise RuntimeError(f"No parquet files found in {types_dir}")
 
-    return Dataset.from_parquet(parquet_files)
+    # Type ignore for datasets library's strict PathLike typing
+    return cast(Dataset, Dataset.from_parquet(parquet_files))  # type: ignore[arg-type]
 
 
 def load_tactics_dataset(tactics_dir: Path) -> Dataset:
@@ -87,7 +116,8 @@ def load_tactics_dataset(tactics_dir: Path) -> Dataset:
     if not parquet_files:
         raise RuntimeError(f"No parquet files found in {tactics_dir}")
 
-    return Dataset.from_parquet(parquet_files)
+    # Type ignore for datasets library's strict PathLike typing
+    return cast(Dataset, Dataset.from_parquet(parquet_files))  # type: ignore[arg-type]
 
 
 def get_record_by_name(dataset: Dataset, name: str) -> Optional[Dict[str, Any]]:
@@ -109,7 +139,7 @@ def get_record_by_name(dataset: Dataset, name: str) -> Optional[Dict[str, Any]]:
     if len(matches) > 1:
         raise RuntimeError(f"Multiple records found for name '{name}': {len(matches)}")
 
-    return matches[0]
+    return cast(Dict[str, Any], matches[0])
 
 
 def get_records_by_module(dataset: Dataset, module: str) -> List[Dict[str, Any]]:
@@ -124,7 +154,7 @@ def get_records_by_module(dataset: Dataset, module: str) -> List[Dict[str, Any]]
         List of record dicts
     """
     matches = dataset.filter(lambda x: x['module'] == module)
-    return [matches[i] for i in range(len(matches))]
+    return [cast(Dict[str, Any], matches[i]) for i in range(len(matches))]
 
 
 def assert_record_exact_match(actual: Dict[str, Any], expected: Dict[str, Any]) -> None:
@@ -207,7 +237,7 @@ def get_records_by_tactic(dataset: Dataset, tactic: str) -> List[Dict[str, Any]]
         List of record dicts
     """
     matches = dataset.filter(lambda x: x['ppTac'] == tactic)
-    return [matches[i] for i in range(len(matches))]
+    return [cast(Dict[str, Any], matches[i]) for i in range(len(matches))]
 
 
 def get_records_by_tactic_contains(dataset: Dataset, substring: str) -> List[Dict[str, Any]]:
@@ -222,7 +252,7 @@ def get_records_by_tactic_contains(dataset: Dataset, substring: str) -> List[Dic
         List of record dicts
     """
     matches = dataset.filter(lambda x: substring in x['ppTac'])
-    return [matches[i] for i in range(len(matches))]
+    return [cast(Dict[str, Any], matches[i]) for i in range(len(matches))]
 
 
 def assert_tactic_exists(dataset: Dataset, tactic: str) -> None:

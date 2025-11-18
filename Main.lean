@@ -9,12 +9,9 @@ open Lean
 abbrev Command := String
 
 structure Options where
-  scoutPath : System.FilePath := "."
   target : Option Target := none
-  dataDir : System.FilePath := "."
   command : Option Command := none
-  batchRows : Nat := 1024
-  numShards : Nat := 128
+  schemaOnly : Bool := false
 
 abbrev M := ReaderT Options IO
 
@@ -28,21 +25,12 @@ def getTarget : M Target := do
   | some tgt => return tgt
   | none => throw <| .userError "No target specified. Use --imports or --read"
 
-def getDataDir : M System.FilePath := read <&> Options.dataDir
-
-def getScoutPath : M System.FilePath := read <&> Options.scoutPath
-
-def getNumShards : M Nat := read <&> Options.numShards
-
-def getBatchRows : M Nat := read <&> Options.batchRows
+def getSchemaOnly : M Bool := read <&> Options.schemaOnly
 
 def processArgs (args : List String) (opts : Options) : Options :=
   match args with
-  | "--scoutPath" :: path :: args => processArgs args { opts with scoutPath := path }
   | "--command" :: command :: args => processArgs args { opts with command := some command }
-  | "--dataDir" :: dataDir :: args => processArgs args { opts with dataDir := dataDir }
-  | "--numShards" :: n :: args => processArgs args { opts with numShards := n.toNat! }
-  | "--batchRows" :: n :: args => processArgs args { opts with batchRows := n.toNat! }
+  | "--schema" :: args => processArgs args { opts with schemaOnly := true }
   | "--read" :: [path] => { opts with target := some <| .read path {} }
   | "--imports" :: importsList => { opts with target := some <| .mkImports importsList.toArray {} }
   | _ => opts
@@ -53,32 +41,33 @@ unsafe
 def main : M UInt32 := do
   let command ← getCommand
   let dataExtractors := data_extractors
+
+  -- Handle "extractors" command (list available extractors)
   if command == "extractors" then
     for (e, _) in dataExtractors do
       println! e
     return 0
+
+  -- Get the requested extractor
   let some extractor := dataExtractors.get? command.toName
     | throw <| .userError s!"Unknown command: {command}"
-  let basePath : System.FilePath := (← getDataDir) / command |>.normalize
-  if ← basePath.isDir then throw <| .userError s!"Data directory {basePath} already exists. Aborting."
-  IO.FS.createDirAll basePath
-  let realPath ← IO.FS.realPath basePath
+
+  -- Handle --schema flag (output schema with key and exit)
+  if ← getSchemaOnly then
+    let schemaJson := extractor.schema.toJson
+    let fieldsJson := schemaJson.getObjValAs? (Array Json) "fields" |>.toOption.getD #[]
+    let schemaWithKey : Json := json% {
+      fields : $(fieldsJson),
+      key : $(extractor.key)
+    }
+    IO.println schemaWithKey.compress
+    return 0
+
+  -- Run the extractor and write JSON lines to stdout
   let tgt ← getTarget
-  let compressor ← IO.Process.spawn {
-    cmd := "uv"
-    cwd := ← getScoutPath
-    args := #["run", "python", "-m", "lean_scout",
-      "--numShards", s!"{← getNumShards}",
-      "--batchRows", s!"{← getBatchRows}",
-      "--basePath", realPath.toString,
-      "--key", extractor.key,
-      "--schema", extractor.schema.toJson.compress,
-    ]
-    stdin := .piped
-  }
-  let (stdin, child) ← compressor.takeStdin
-  extractor.go (fun j => stdin.putStrLn j.compress) tgt
-  child.wait
+  let stdout ← IO.getStdout
+  extractor.go (fun j => stdout.putStrLn j.compress) tgt
+  return 0
 
 end LeanScout.CLI
 

@@ -9,7 +9,6 @@ from helpers import (
     load_tactics_dataset,
     get_records_by_tactic,
     get_records_by_tactic_contains,
-    assert_tactic_exists,
     assert_tactic_contains,
 )
 
@@ -71,7 +70,6 @@ def test_tactics_contains(tactics_test_dataset, tactics_test_spec):
     for check in tactics_test_spec['tactic_contains']:
         substring = check['substring']
         min_count = check['min_count']
-        description = check.get('description', '')
 
         assert_tactic_contains(tactics_test_dataset, substring, min_count)
 
@@ -127,10 +125,16 @@ def test_tactics_schema(tactics_test_dataset):
     # Verify expected fields exist
     assert 'ppTac' in first_record, "Missing 'ppTac' field"
     assert 'goals' in first_record, "Missing 'goals' field"
+    assert 'elaborator' in first_record, "Missing 'elaborator' field"
+    assert 'name' in first_record, "Missing 'name' field"
 
     # Verify field types
     assert isinstance(first_record['ppTac'], str), "'ppTac' should be a string"
     assert isinstance(first_record['goals'], list), "'goals' should be a list"
+    assert isinstance(first_record['elaborator'], str), "'elaborator' should be a string"
+    # 'name' is nullable, so it can be None or str
+    assert first_record['name'] is None or isinstance(first_record['name'], str), \
+        "'name' should be None or a string"
 
     # Verify goals structure (each goal is an object with pp and usedConstants)
     if len(first_record['goals']) > 0:
@@ -236,3 +240,45 @@ def test_tactics_used_constants(tactics_test_dataset):
             for record in rw_nat_records
             for goal in record['goals']
         ), "All goals should have usedConstants lists"
+
+
+def test_tactics_elaborator_field(tactics_test_dataset):
+    """
+    Test that the elaborator field is populated correctly.
+
+    Verifies that every tactic record has a non-empty elaborator string.
+    """
+    # Sample tactics to check
+    sample_size = min(20, len(tactics_test_dataset))
+
+    for i in range(sample_size):
+        record = tactics_test_dataset[i]
+
+        # Elaborator should exist and be a non-empty string
+        assert 'elaborator' in record, f"Record {i}: missing 'elaborator' field"
+        assert isinstance(record['elaborator'], str), \
+            f"Record {i}: 'elaborator' should be a string"
+        assert len(record['elaborator']) > 0, \
+            f"Record {i}: 'elaborator' should not be empty"
+
+
+def test_tactics_name_field(tactics_test_dataset):
+    """
+    Test that the name field is populated correctly.
+
+    Verifies that the name field exists and is either None or a string.
+    Some tactics may not have syntax node names.
+    """
+    # Sample tactics to check
+    sample_size = min(20, len(tactics_test_dataset))
+
+    for i in range(sample_size):
+        record = tactics_test_dataset[i]
+
+        # Name should exist (but can be None)
+        assert 'name' in record, f"Record {i}: missing 'name' field"
+
+        # If present, should be a string
+        if record['name'] is not None:
+            assert isinstance(record['name'], str), \
+                f"Record {i}: 'name' should be a string when not None"

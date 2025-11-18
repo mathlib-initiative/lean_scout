@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-lean-scout-writer = "lean_scout.__main__:main"
+lean-scout = "lean_scout.cli:main"
 
 [build-system]
 requires = ["hatchling"]
