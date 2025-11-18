@@ -84,6 +84,64 @@ def extract_from_library(command: str, library: str, data_dir: Path, parallel: i
     return output_dir
 
 
+def extract_from_dependency_types(library: str, data_dir: Path, working_dir: Path) -> Path:
+    """
+    Run the types extractor from a test project where lean_scout is a dependency.
+
+    Args:
+        library: Library name (e.g., "LeanScoutTestProject")
+        data_dir: Base directory for output
+        working_dir: Working directory (e.g., "test_project")
+
+    Returns:
+        Path to the types subdirectory containing parquet files
+    """
+    result = subprocess.run(
+        ["lake", "run", "scout", "--command", "types", "--dataDir", str(data_dir), "--imports", library],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=str(working_dir)
+    )
+
+    types_dir = data_dir / "types"
+    if not types_dir.exists():
+        raise RuntimeError(f"Types directory not created: {types_dir}\nstdout: {result.stdout}\nstderr: {result.stderr}")
+
+    return types_dir
+
+
+def extract_from_dependency_library(command: str, library: str, data_dir: Path,
+                                     working_dir: Path, parallel: int = 1) -> Path:
+    """
+    Run an extractor on all modules from a library in a test project where lean_scout is a dependency.
+
+    Args:
+        command: Extractor command (e.g., "types", "tactics")
+        library: Library name (e.g., "LeanScoutTestProject")
+        data_dir: Base directory for output
+        working_dir: Working directory (e.g., "test_project")
+        parallel: Number of parallel workers
+
+    Returns:
+        Path to the command subdirectory containing parquet files
+    """
+    result = subprocess.run(
+        ["lake", "run", "scout", "--command", command, "--dataDir", str(data_dir),
+         "--library", library, "--parallel", str(parallel)],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=str(working_dir)
+    )
+
+    output_dir = data_dir / command
+    if not output_dir.exists():
+        raise RuntimeError(f"{command.capitalize()} directory not created: {output_dir}\nstdout: {result.stdout}\nstderr: {result.stderr}")
+
+    return output_dir
+
+
 def load_types_dataset(types_dir: Path) -> Dataset:
     """
     Load a types dataset from parquet files.

@@ -1,0 +1,65 @@
+description: "Test types extractor on LeanScoutTestProject when used as dependency"
+source: "LeanScoutTestProject"
+
+# Exact matches: verify complete record equality for theorems in test project
+exact_matches:
+  - name: "add_zero"
+    module: "LeanScoutTestProject.Basic"
+    type: "∀ (n : Nat), n + 0 = n"
+
+  - name: "zero_add"
+    module: "LeanScoutTestProject.Basic"
+    type: "∀ (n : Nat), 0 + n = n"
+
+  - name: "succ_eq_add_one"
+    module: "LeanScoutTestProject.Basic"
+    type: "∀ (n : Nat), n.succ = n + 1"
+
+  - name: "add_comm"
+    module: "LeanScoutTestProject.Basic"
+    type: "∀ (a b : Nat), a + b = b + a"
+
+  - name: "list_nil_append"
+    module: "LeanScoutTestProject.Lists"
+    type: "∀ {α : Type} (xs : List α), [] ++ xs = xs"
+
+  - name: "list_cons_append"
+    module: "LeanScoutTestProject.Lists"
+    type: "∀ {α : Type} (x : α) (xs ys : List α), x :: xs ++ ys = x :: (xs ++ ys)"
+
+  - name: "list_length_nil"
+    module: "LeanScoutTestProject.Lists"
+    type: "∀ {α : Type}, [].length = 0"
+
+  - name: "list_map_nil"
+    module: "LeanScoutTestProject.Lists"
+    type: "∀ {α β : Type} (f : α → β), List.map f [] = []"
+
+# Property checks: verify specific properties without exact matching
+property_checks:
+  - name: "add_zero"
+    properties:
+      module_contains: "LeanScoutTestProject"
+      type_contains: "Nat"
+      module_not_null: true
+
+  - name: "list_nil_append"
+    properties:
+      module_contains: "LeanScoutTestProject"
+      type_contains: "List"
+      module_not_null: true
+
+# Count checks: verify dataset statistics
+count_checks:
+  min_records: 8  # At least the 8 theorems we defined
+
+  # Ensure all our theorems exist
+  has_names:
+    - "add_zero"
+    - "zero_add"
+    - "succ_eq_add_one"
+    - "add_comm"
+    - "list_nil_append"
+    - "list_cons_append"
+    - "list_length_nil"
+    - "list_map_nil"

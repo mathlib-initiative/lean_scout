@@ -55,7 +55,7 @@ unsafe
 def withEnv (tgt : ImportsTarget) (go : Environment → IO α) : IO α := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
-  let env ← Lean.importModules tgt.imports tgt.opts
+  let env ← Lean.importModules (loadExts := true) tgt.imports tgt.opts
   go env
 
 unsafe

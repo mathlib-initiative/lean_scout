@@ -1,0 +1,41 @@
+description: "Test tactics extractor on LeanScoutTestProject when used as dependency"
+source: "LeanScoutTestProject"
+
+# Exact matches: verify specific tactics exist
+exact_matches:
+  - ppTac: "rfl"
+    goals_not_empty: true
+
+# Tactics that should contain specific substrings
+tactic_contains:
+  - substring: "rw"
+    min_count: 3
+    description: "Rewrite tactics from add_comm and zero_add proofs"
+
+  - substring: "rfl"
+    min_count: 6
+    description: "Reflexivity tactics from simple proofs"
+
+  - substring: "induction"
+    min_count: 1
+    description: "Induction tactic from add_comm proof"
+
+  - substring: "Nat.zero_add"
+    min_count: 1
+    description: "Rewrite using Nat.zero_add"
+
+  - substring: "Nat.add_zero"
+    min_count: 1
+    description: "Rewrite using Nat.add_zero"
+
+  - substring: "Nat.succ_add"
+    min_count: 1
+    description: "Rewrite using Nat.succ_add in induction step"
+
+# Count checks: verify dataset statistics
+count_checks:
+  min_records: 10  # At least 10 tactic invocations from test project
+
+  # Ensure these tactics exist
+  has_tactics:
+    - "rfl"

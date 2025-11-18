@@ -4,22 +4,7 @@ set -e  # Exit on error
 
 echo ""
 echo "=== Running Python Unit Tests ==="
-uv run pytest test/test_types.py test/test_tactics.py test/test_parallel.py test/test_query_library.py test/test_schema.py -v
-
-echo ""
-echo "=== Testing LeanScout as Dependency ==="
-TEST_DATA_DIR=$(mktemp -d)
-echo "Test data directory: $TEST_DATA_DIR"
-cd test_project
-lake build
-
-echo ""
-echo "=== Testing Typers Extractor in Test Project ==="
-lake run scout --command types --dataDir "$TEST_DATA_DIR" --imports LeanScoutTestProject
-
-echo ""
-echo "=== Testing Tactics Extractor in Test Project ==="
-lake run scout --command tactics --dataDir "$TEST_DATA_DIR" --library LeanScoutTestProject --parallel 2
+uv run pytest test/test_types.py test/test_tactics.py test/test_parallel.py test/test_query_library.py test/test_schema.py test/test_dependency.py -v
 
 echo ""
 echo "=== All Tests Passed ==="
