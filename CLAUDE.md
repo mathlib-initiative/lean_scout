@@ -159,7 +159,11 @@ structure DataExtractor where
 
 Located in `LeanScout/DataExtractors/`:
 - **types**: Extracts constant names, modules, and types from Lean environments
-- **tactics**: Extracts tactic usage information
+- **tactics**: Extracts tactic invocations with:
+  - Goal states before the tactic (pretty-printed goals and used constants)
+  - Pretty-printed tactic syntax
+  - Elaborator name
+  - Syntax node name (when available)
 
 ### Target System
 
