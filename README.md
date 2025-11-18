@@ -149,23 +149,59 @@ At a high level, LeanScout uses a **Python-first architecture**:
 
 The data is written to disk organized as sharded Parquet files for efficient storage and loading. 
 
-# Data Extractors
+# Creating Custom Data Extractors
 
-LeanScout uses "data extractors" to create datasets.
-The type of data extractors is defined as follows:
+You can extend Lean Scout by creating custom data extractors. An extractor is defined as:
+
 ```lean
 structure DataExtractor where
-  schema : Arrow.Schema
+  schema : Schema
   key : String
-  go : IO.FS.Handle → Target → IO Unit 
+  go : (Json → IO Unit) → Target → IO Unit
 ```
 
-Here,
-- `schema` is the schema of the data being stored. This is serialized to JSON and queried by the Python orchestrator before extraction begins.
-- `key` is the field name that will be used to compute the shard associated with a given datapoint (via hashing).
-- `go` is the main function that extracts data and writes JSON lines to stdout. The `IO.FS.Handle` parameter writes to stdout, and the `Target` is the target that is being processed (either imports or a file to read).
+Where:
+- `schema` is an Arrow-compatible schema defining the output structure. It's serialized to JSON and queried by the Python orchestrator before extraction begins.
+- `key` is the field name used to compute the shard ID (via BLAKE2b hashing) for distributing data across shards.
+- `go` is the main extraction function that:
+  - Takes a `sink` function (`Json → IO Unit`) for writing JSON records
+  - Takes a `Target` specifying what to extract from (`.imports` or `.input`)
+  - Extracts data and writes JSON records by calling the sink
 
-When declaring a new data extractor, it should be tagged with the `data_extractor` attribute.
-The syntax for this is `@[data_extractor cmd]`, where `cmd` is the command that will be used to call the data extractor being defined. 
+### Example: Creating a Custom Extractor
 
-The syntax `data_extractors`, which is used in the main CLI defined in `Main.lean`, elaborates to a `Std.HashMap Command DataExtractor` which contains all of the data extractors with the associated command that have been tagged as such in the given environment.
+Create a file `LeanScout/DataExtractors/MyExtractor.lean`:
+
+```lean
+import LeanScout
+
+@[data_extractor mycommand]
+public unsafe def myExtractor : DataExtractor where
+  schema := .mk [
+    { name := "id", nullable := false, type := .string },
+    { name := "data", nullable := true, type := .string }
+  ]
+  key := "id"
+  go sink
+  | .imports tgt => tgt.runCoreM <| Meta.MetaM.run' do
+    -- Extract from the imported environment
+    sink <| json% { id : "example", data : "some data" }
+  | .input tgt =>
+    -- Extract from a specific file
+    throw <| .userError "Unsupported Target"
+```
+
+Then import it in `LeanScout/DataExtractors.lean`:
+```lean
+import LeanScout.DataExtractors.MyExtractor
+```
+
+Rebuild and use:
+```bash
+lake build
+lake run scout --command mycommand --imports Lean
+```
+
+### Registration
+
+Extractors use the `@[data_extractor cmd]` attribute for automatic registration. The attribute system maintains a `HashMap` of command names to extractor implementations, which is queried at runtime by the main CLI in `Main.lean`.
