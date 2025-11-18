@@ -39,6 +39,43 @@ def read_file_list(file_list_path: str) -> List[str]:
     return lines
 
 
+def query_library_paths(library: str, scout_path: Path) -> List[str]:
+    """
+    Query module paths for a library using lake query.
+
+    Args:
+        library: Library name (e.g., "LeanScoutTest", "Mathlib")
+        scout_path: Path to Scout package root
+
+    Returns:
+        List of file paths from the library
+
+    Raises:
+        RuntimeError: If lake query fails or returns no paths
+    """
+    result = subprocess.run(
+        ["lake", "query", "-q", f"{library}:module_paths"],
+        cwd=scout_path,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Failed to query module paths for library '{library}'\n"
+            f"stdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
+        )
+
+    # Parse output (one file path per line)
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+    if not lines:
+        raise RuntimeError(f"No module paths found for library '{library}'")
+
+    return lines
+
+
 def get_schema(command: str, scout_path: Path) -> str:
     """
     Query Lean for the schema of a given extractor command.
@@ -91,6 +128,9 @@ Examples:
   # Extract tactics from a specific file
   lean-scout --command tactics --read LeanScoutTest/TacticsTest.lean
 
+  # Extract from all modules in a library
+  lean-scout --command tactics --library LeanScoutTest --parallel 4
+
   # Specify custom data directory and sharding
   lean-scout --command types --dataDir ~/storage --numShards 32 --imports Lean
         """
@@ -118,6 +158,10 @@ Examples:
     target_group.add_argument(
         "--read-list",
         help="File containing list of Lean files to read (one per line). Files will be processed in parallel."
+    )
+    target_group.add_argument(
+        "--library",
+        help="Library name to extract from (e.g., LeanScoutTest, Mathlib). Queries module paths using lake query -q <library>:module_paths."
     )
 
     # Optional arguments
@@ -176,8 +220,8 @@ Examples:
         sys.exit(result.returncode)
 
     # Validate that target is specified for all other commands
-    if not args.imports and not args.read and not args.read_list:
-        parser.error("one of the arguments --imports --read --read-list is required (except for 'extractors' command)")
+    if not args.imports and not args.read and not args.read_list and not args.library:
+        parser.error("one of the arguments --imports --read --read-list --library is required (except for 'extractors' command)")
 
     # Convert paths
     scout_path = Path(args.scoutPath).resolve()
@@ -203,6 +247,10 @@ Examples:
         elif args.read_list:
             sys.stderr.write(f"Reading file list from: {args.read_list}\n")
             read_files = read_file_list(args.read_list)
+            sys.stderr.write(f"Found {len(read_files)} files to process\n")
+        elif args.library:
+            sys.stderr.write(f"Querying module paths for library: {args.library}\n")
+            read_files = query_library_paths(args.library, scout_path)
             sys.stderr.write(f"Found {len(read_files)} files to process\n")
 
         # Query schema from Lean

@@ -54,11 +54,16 @@ lake run scout --command tactics --read File1.lean File2.lean File3.lean --paral
 # Extract from file list (useful for processing entire libraries)
 lake build LeanScout:module_paths  # Generates module_paths with all file paths
 lake run scout --command tactics --read-list module_paths --parallel 8
+
+# Extract from library using lake query (recommended for libraries)
+lake run scout --command tactics --library LeanScoutTest --parallel 8
 ```
 
 **Key difference**:
 - `--imports`: Single Lean subprocess processes entire import closure
-- `--read` / `--read-list`: One Lean subprocess per file, enabling true parallel extraction
+- `--read` / `--read-list` / `--library`: One Lean subprocess per file, enabling true parallel extraction
+
+**Note**: `--library` uses the `module_paths` library facet to automatically discover all module files in a library (via `lake query -q <library>:module_paths`). This is more convenient than manually building and passing a file list.
 
 ### Testing
 ```bash
@@ -70,7 +75,12 @@ lake test
 
 # Run just Python unit tests
 uv run pytest test/test_types.py -v
+
+# Run all Python tests
+uv run pytest test/ -v
 ```
+
+**IMPORTANT**: When adding new test files to `test/`, you MUST update the `./run_tests` script to include them in the explicit test file list. This ensures the integration script runs all tests. The script explicitly lists test files rather than using `test/` to provide clear visibility of what's being tested.
 
 Lean Scout has three levels of testing:
 
@@ -240,7 +250,7 @@ The key field is specified per extractor (e.g., `types` uses `"name"` as the key
 - `LeanScout` library (default target)
 - `lean_scout` executable (from `Main.lean`)
 - `scout` script: wraps `uv run lean-scout` (Python CLI) with `--scoutPath` automatically set to the Scout dependency root
-- `module_paths` library facet: generates a file containing all module file paths (one per line)
+- `module_paths` library facet: generates a file containing all module file paths (one per line), queryable via `lake query -q <library>:module_paths`
 
 **Important**: When Lean Scout is used as a dependency in another project, use `lake run scout` (which invokes the script). The script calls the Python CLI which orchestrates Lean subprocess execution. The `--scoutPath` is automatically passed to ensure correct package resolution.
 
@@ -265,7 +275,9 @@ The test suite consists of:
 2. **Python Unit Tests**:
    - `test/test_types.py`: Tests types extractor with YAML-based specifications
    - `test/test_tactics.py`: Tests tactics extractor with YAML-based specifications
-   - `test/test_parallel.py`: Tests parallel file extraction (new!)
+   - `test/test_parallel.py`: Tests parallel file extraction with --read and --read-list
+   - `test/test_query_library.py`: Tests --library functionality for library-based extraction
+   - `test/test_schema.py`: Tests schema serialization/deserialization
    - Uses pytest framework with YAML-based test specifications
    - Extracts data once per test session (module-scoped fixture)
    - Three types of assertions:
@@ -281,8 +293,9 @@ The test suite consists of:
    - Example: `types_init.yaml` tests the types extractor on Init module
 
 4. **Integration Script** (`./run_tests`):
-   - Runs all three test levels sequentially
-   - Creates temporary directory for extraction
+   - Runs all Python unit tests sequentially by explicitly listing test files
+   - **IMPORTANT**: When adding new test files, update this script to include them
+   - Current test files: `test_types.py`, `test_tactics.py`, `test_parallel.py`, `test_query_library.py`, `test_schema.py`
    - Validates full end-to-end pipeline
 
 ## Adding a New Data Extractor

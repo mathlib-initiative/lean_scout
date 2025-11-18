@@ -56,6 +56,34 @@ def extract_tactics(file_path: str, data_dir: Path) -> Path:
     return tactics_dir
 
 
+def extract_from_library(command: str, library: str, data_dir: Path, parallel: int = 1) -> Path:
+    """
+    Run an extractor on all modules from a library using --library.
+
+    Args:
+        command: Extractor command (e.g., "types", "tactics")
+        library: Library name (e.g., "LeanScoutTest", "Mathlib")
+        data_dir: Base directory for output
+        parallel: Number of parallel workers
+
+    Returns:
+        Path to the command subdirectory containing parquet files
+    """
+    subprocess.run(
+        ["lake", "run", "scout", "--command", command, "--dataDir", str(data_dir),
+         "--library", library, "--parallel", str(parallel)],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    output_dir = data_dir / command
+    if not output_dir.exists():
+        raise RuntimeError(f"{command.capitalize()} directory not created: {output_dir}")
+
+    return output_dir
+
+
 def load_types_dataset(types_dir: Path) -> Dataset:
     """
     Load a types dataset from parquet files.
