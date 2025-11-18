@@ -24,13 +24,12 @@ lean_exe shake where
   supportInterpreter := true
 
 
-library_facet module_paths (lib) : System.FilePath := do
+library_facet module_paths (lib) : Array System.FilePath := do
   let modules ← (← lib.modules.fetch).await
-  let path : System.FilePath := "module_paths"
-  let handle ← IO.FS.Handle.mk path .write
+  let mut out := #[]
   for module in modules do
-    handle.putStrLn <| module.filePath module.pkg.rootDir "lean" |>.toString
-  return pure path
+    out := out.push <| module.filePath module.pkg.rootDir "lean"
+  return pure out
 
 script scout (args) := do
   let workspace ← getWorkspace
