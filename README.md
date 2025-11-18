@@ -207,3 +207,41 @@ lake run scout --command mycommand --imports Lean
 ### Registration
 
 Extractors use the `@[data_extractor cmd]` attribute for automatic registration. The attribute system maintains a `HashMap` of command names to extractor implementations, which is queried at runtime by the main CLI in `Main.lean`.
+
+# Testing
+
+Lean Scout has a comprehensive three-phase test suite:
+
+### Running Tests
+
+```bash
+# Run all tests (all three phases)
+./run_tests
+
+# Run individual phases
+lake test                          # Phase 0: Lean schema tests only
+uv run pytest test/internals/ -v  # Phase 1: Infrastructure tests only
+uv run pytest test/extractors/ -v # Phase 2: Extractor tests only
+```
+
+### Test Architecture
+
+**Phase 0: Lean Schema Tests** (`lake test`)
+- Tests schema serialization/deserialization roundtrip in Lean
+- Located in `LeanScoutTest.lean`
+- Uses `#guard_msgs` to verify schema JSON format
+- Ensures Lean schemas can be correctly parsed by Python
+
+**Phase 1: Infrastructure Tests** (`test/internals/`)
+- Tests Python infrastructure without extracting Lean data
+- Focus: Schema querying, writer logic, orchestrator, CLI utilities
+- 34 tests using real subprocess calls (no mocking)
+- Fast execution (no Lean data extraction)
+
+**Phase 2: Data Extractor Tests** (`test/extractors/`)
+- Tests data extractors using `test_project` as a dependency
+- Focus: Verifying extractors produce correct output
+- 17 tests using YAML specifications for expected outputs
+- Tests Scout when used as a dependency (real-world usage)
+
+The complete test suite ensures all components work correctly at every level: Lean schema validation, Python infrastructure, and end-to-end extraction.

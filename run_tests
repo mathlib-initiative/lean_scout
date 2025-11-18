@@ -3,8 +3,26 @@
 set -e  # Exit on error
 
 echo ""
-echo "=== Running Python Unit Tests ==="
-uv run pytest test/test_types.py test/test_tactics.py test/test_parallel.py test/test_query_library.py test/test_schema.py test/test_dependency.py -v
+echo "╔════════════════════════════════════════════════╗"
+echo "║     Lean Scout Test Suite (Three Phases)       ║"
+echo "╚════════════════════════════════════════════════╝"
 
 echo ""
-echo "=== All Tests Passed ==="
+echo "=== Phase 0: Lean Schema Tests ==="
+echo "Testing schema serialization/deserialization roundtrip"
+lake test
+
+echo ""
+echo "=== Phase 1: Infrastructure Tests ==="
+echo "Testing Python infrastructure without Lean data extraction"
+uv run pytest test/internals/ -v
+
+echo ""
+echo "=== Phase 2: Data Extractor Tests ==="
+echo "Testing data extractors using test_project"
+uv run pytest test/extractors/ -v
+
+echo ""
+echo "╔════════════════════════════════════════════════╗"
+echo "║          All Tests Passed! ✓                   ║"
+echo "╚════════════════════════════════════════════════╝"
