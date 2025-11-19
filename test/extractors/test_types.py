@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from helpers import (
     TEST_PROJECT_DIR,
+    build_test_project,
     get_record_by_name,
     assert_record_exact_match,
     assert_record_contains,
@@ -44,7 +45,7 @@ def load_types_dataset(types_dir: Path) -> Dataset:
 
 
 @pytest.fixture(scope="module")
-def types_dataset_imports():
+def types_dataset_imports(build_test_project):
     with tempfile.TemporaryDirectory() as tmpdir:
         data_dir = Path(tmpdir)
         types_dir = extract_from_dependency_types(
