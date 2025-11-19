@@ -1,127 +1,41 @@
-description: "Test tactics extractor on LeanScoutTest/TacticsTest.lean"
-source: "LeanScoutTest/TacticsTest.lean"
+description: "Test tactics extractor on LeanScoutTestProject when used as dependency"
+source: "LeanScoutTestProject"
 
-# Exact matches: verify complete record equality for specific tactics
+# Exact matches: verify specific tactics exist
 exact_matches:
   - ppTac: "rfl"
-    goals_not_empty: true
-
-  - ppTac: "trivial"
-    goals_not_empty: true
-
-  - ppTac: "decide"
-    goals_not_empty: true
-
-  - ppTac: "assumption"
-    goals_not_empty: true
-
-  - ppTac: "contradiction"
     goals_not_empty: true
 
 # Tactics that should contain specific substrings
 tactic_contains:
   - substring: "rw"
-    min_count: 5
-    description: "Rewrite tactics should appear multiple times"
-
-  - substring: "exact"
-    min_count: 10
-    description: "Exact tactic is used frequently"
-
-  - substring: "intro"
     min_count: 3
-    description: "Intro tactic should appear"
+    description: "Rewrite tactics from add_comm and zero_add proofs"
 
-  - substring: "cases"
-    min_count: 3
-    description: "Cases tactic with different types"
+  - substring: "rfl"
+    min_count: 6
+    description: "Reflexivity tactics from simple proofs"
 
   - substring: "induction"
     min_count: 1
-    description: "Induction tactic"
+    description: "Induction tactic from add_comm proof"
 
-  - substring: "apply"
+  - substring: "Nat.zero_add"
     min_count: 1
-    description: "Apply tactic"
+    description: "Rewrite using Nat.zero_add"
 
-  - substring: "constructor"
-    min_count: 2
-    description: "Constructor tactic"
-
-  - substring: "left"
+  - substring: "Nat.add_zero"
     min_count: 1
-    description: "Left tactic for Or"
+    description: "Rewrite using Nat.add_zero"
 
-  - substring: "right"
+  - substring: "Nat.succ_add"
     min_count: 1
-    description: "Right tactic for Or"
-
-  - substring: "exfalso"
-    min_count: 1
-    description: "Exfalso tactic"
-
-  - substring: "subst"
-    min_count: 1
-    description: "Subst tactic"
-
-  - substring: "simp"
-    min_count: 2
-    description: "Simp tactic"
-
-  - substring: "revert"
-    min_count: 1
-    description: "Revert tactic"
-
-  - substring: "generalize"
-    min_count: 1
-    description: "Generalize tactic"
-
-  - substring: "split"
-    min_count: 1
-    description: "Split tactic"
-
-  - substring: "unfold"
-    min_count: 1
-    description: "Unfold tactic"
-
-  - substring: "calc"
-    min_count: 1
-    description: "Calc tactic"
-
-  - substring: "try"
-    min_count: 1
-    description: "Try combinator"
-
-  - substring: "repeat"
-    min_count: 1
-    description: "Repeat combinator"
-
-  - substring: "first"
-    min_count: 1
-    description: "First combinator"
-
-  - substring: "all_goals"
-    min_count: 1
-    description: "All goals combinator"
-
-  - substring: "any_goals"
-    min_count: 1
-    description: "Any goals combinator"
+    description: "Rewrite using Nat.succ_add in induction step"
 
 # Count checks: verify dataset statistics
 count_checks:
-  min_records: 40  # At least 40 tactic invocations from the test file
+  min_records: 10  # At least 10 tactic invocations from test project
 
-  # Ensure these common tactics exist (as they appear in the extractor output)
+  # Ensure these tactics exist
   has_tactics:
     - "rfl"
-    - "assumption"
-    - "trivial"
-    - "decide"
-    - "contradiction"
-    - "constructor"
-    - "left"
-    - "right"
-    - "simp"
-    - "exfalso"
-    - "split"

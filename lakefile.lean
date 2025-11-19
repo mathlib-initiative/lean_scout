@@ -9,8 +9,7 @@ package lean_scout where
   ]
   testDriver := "LeanScoutTest"
 
-lean_lib LeanScoutTest where
-  globs := #[.submodules `LeanScoutTest]
+lean_lib LeanScoutTest
 
 @[default_target]
 lean_lib LeanScout

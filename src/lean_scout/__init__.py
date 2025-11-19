@@ -11,7 +11,6 @@ Architecture:
 
 from .utils import (
     deserialize_schema,
-    load_schema,
     stream_json_lines,
 )
 
@@ -25,7 +24,6 @@ from .orchestrator import (
 
 __all__ = [
     "deserialize_schema",
-    "load_schema",
     "stream_json_lines",
     "ShardedParquetWriter",
     "Orchestrator",

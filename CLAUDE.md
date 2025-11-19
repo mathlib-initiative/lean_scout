@@ -67,71 +67,84 @@ lake run scout --command tactics --library LeanScoutTest --parallel 8
 
 ### Testing
 ```bash
-# Run Lean unit tests (schema roundtrip tests)
-lake test
-
-# Run all tests (Lean + Python unit tests + integration)
+# Run all tests (all three phases)
 ./run_tests
 
-# Run just Python unit tests
-uv run pytest test/test_types.py -v
-
-# Run all Python tests
-uv run pytest test/ -v
+# Run individual phases
+lake test                          # Phase 0: Lean schema tests
+uv run pytest test/internals/ -v  # Phase 1: Infrastructure tests
+uv run pytest test/extractors/ -v # Phase 2: Extractor tests
 ```
 
-**IMPORTANT**: When adding new test files to `test/`, you MUST update the `./run_tests` script to include them in the explicit test file list. This ensures the integration script runs all tests. The script explicitly lists test files rather than using `test/` to provide clear visibility of what's being tested.
+Lean Scout has a **three-phase test architecture**:
 
-Lean Scout has three levels of testing:
+**Phase 0: Lean Schema Tests** (`lake test`)
+- Tests schema serialization/deserialization roundtrip in Lean
+- Located in `LeanScoutTest.lean`
+- Uses `#guard_msgs` to verify schema JSON format
+- Ensures Lean schemas can be correctly parsed by Python
 
-1. **Lean Schema Tests** (`lake test`): Tests schema serialization/deserialization roundtrip using `#guard_msgs`
-2. **Python Unit Tests** (`pytest`): Tests data extractors against known expected outputs using YAML specifications
-3. **Integration Test**: Full end-to-end extraction and validation
+**Phase 1: Infrastructure Tests** (`test/internals/`)
+- Tests Python infrastructure without extracting Lean data
+- Focus: Schema querying, writer logic, orchestrator, CLI utilities
+- Tests use real subprocess calls (no mocking)
+- Files: `test_schema.py`, `test_writer.py`, `test_orchestrator.py`, `test_cli.py`
+- 34 tests, fast execution
+
+**Phase 2: Data Extractor Tests** (`test/extractors/`)
+- Tests data extractors using `test_project` as dependency
+- Focus: Verifying extractors produce correct output
+- Uses YAML-based specifications for expected outputs
+- Files: `test_types.py`, `test_tactics.py`
+- 17 tests
+
+#### Test Project
+
+The `test_project/` directory contains a minimal Lean project used for testing:
+- Simple theorems in `Basic.lean` and `Lists.lean`
+- Lean Scout is added as a dependency
+- Tests verify extractors work correctly when Scout is used as a dependency
 
 #### Adding New Test Cases
 
 To test specific constants from an extractor, edit or create a YAML spec in `test/fixtures/`:
 
 ```yaml
-# test/fixtures/types_init.yaml
-description: "Test types extractor on Init module"
-source: "Init"
-
-# Exact matches: verify complete record equality
+# test/fixtures/types.yaml
 exact_matches:
   - name: "Nat.add"
-    module: "Init.Prelude"
+    module: "LeanScoutTestProject.Basic"
     type: "Nat → Nat → Nat"
 
-# Property checks: verify specific properties
 property_checks:
-  - name: "List.map"
+  - name: "List.length"
     properties:
-      module_contains: "Init"
+      module_contains: "LeanScoutTestProject"
       type_contains: "List"
-      module_not_null: true
 
-# Count checks: verify dataset statistics
 count_checks:
-  min_records: 1000
+  min_records: 100
   has_names:
     - "Nat.add"
-    - "List.map"
+    - "List.length"
 ```
 
 The test framework:
-- Runs extraction once per test session (efficient)
+- Extracts data once per test session (efficient)
 - Verifies exact matches for critical constants
-- Checks properties for flexibility (e.g., substring matching)
-- Validates dataset completeness (minimum record counts, required names)
+- Checks properties for flexibility (substring matching)
+- Validates dataset completeness (minimum records, required names)
 
 ### Python Development
 ```bash
 # Install dependencies
 uv sync
 
-# Run Python tests
-uv run pytest test/test_types.py -v
+# Run infrastructure tests
+uv run pytest test/internals/ -v
+
+# Run extractor tests
+uv run pytest test/extractors/ -v
 ```
 
 ### List Available Extractors
@@ -143,13 +156,18 @@ lake run scout --command extractors
 
 ### Data Extractor System
 
-**Core Type**: `DataExtractor` (defined in `LeanScout/Types.lean:70-73`)
+**Core Type**: `DataExtractor` (defined in `LeanScout/Types.lean`)
 ```lean
 structure DataExtractor where
   schema : Schema      -- Arrow schema defining output structure
   key : String         -- Field name used for computing shard ID
-  go : IO.FS.Handle → Target → IO Unit  -- Extraction function
+  go : (Json → IO Unit) → Target → IO Unit  -- Extraction function
 ```
+
+The `go` function takes:
+- A `sink` function (`Json → IO Unit`) for writing JSON records
+- A `Target` specifying what to extract from (`.imports` or `.input`)
+- Extracts data and writes JSON records by calling the sink
 
 **Registration**: Data extractors use the `@[data_extractor cmd]` attribute to register themselves. The attribute system is defined in `LeanScout/Init.lean:17-42` using a `PersistentEnvExtension` that maintains a `HashMap` of command names to extractor implementations.
 
@@ -269,38 +287,58 @@ lake run scout --command tactics --read-list module_paths --parallel 8
 
 ### Test Infrastructure
 
-The test suite consists of:
+The test suite uses a **three-phase architecture**:
 
-1. **Lean Schema Tests** (`LeanScoutTest/Schema.lean`):
-   - Uses `#guard_msgs` to test schema JSON serialization/deserialization
-   - Validates roundtrip through Python's schema parser
-   - Tests all data types: bool, nat, int, float, string, list, struct
+**Phase 0: Lean Schema Tests** (`LeanScoutTest.lean`)
+- Uses `#guard_msgs` to test schema JSON serialization/deserialization
+- Validates roundtrip through Python's schema parser
+- Tests all data types: bool, nat, int, float, string, list, struct
+- Ensures Lean-generated schemas are correctly parsed by Python
+- Run via `lake test`
 
-2. **Python Unit Tests**:
-   - `test/test_types.py`: Tests types extractor with YAML-based specifications
-   - `test/test_tactics.py`: Tests tactics extractor with YAML-based specifications
-   - `test/test_parallel.py`: Tests parallel file extraction with --read and --read-list
-   - `test/test_query_library.py`: Tests --library functionality for library-based extraction
-   - `test/test_schema.py`: Tests schema serialization/deserialization
-   - Uses pytest framework with YAML-based test specifications
-   - Extracts data once per test session (module-scoped fixture)
-   - Three types of assertions:
-     - **Exact matches**: Full field equality for specific constants
-     - **Property checks**: Substring matching and nullability checks
-     - **Count checks**: Minimum records and required name existence
-   - Helper utilities in `test/helpers.py` for querying datasets
+**Phase 1: Infrastructure Tests** (`test/internals/`)
+- Tests Python infrastructure without extracting Lean data
+- Focus: Core functionality of writer, orchestrator, CLI, and schema handling
+- Uses real subprocess calls (no mocking frameworks)
+- Files:
+  - `test_schema.py`: Schema querying and deserialization (8 tests)
+  - `test_writer.py`: Sharded Parquet writer logic (11 tests)
+  - `test_orchestrator.py`: Subprocess management and output parsing (7 tests)
+  - `test_cli.py`: CLI utilities like file list reading and library path querying (8 tests)
+- Total: 34 tests, fast execution
 
-3. **Test Fixtures** (`test/fixtures/*.yaml`):
-   - Declarative YAML specifications for expected outputs
-   - Easy to read, write, and maintain
-   - Version controlled alongside code
-   - Example: `types_init.yaml` tests the types extractor on Init module
+**Phase 2: Data Extractor Tests** (`test/extractors/`)
+- Tests data extractors using `test_project` as a dependency
+- Focus: Verifying extractors produce correct output when Scout is used as a dependency
+- Files:
+  - `test_types.py`: Tests types extractor with `--imports` mode
+  - `test_tactics.py`: Tests tactics extractor with `--library` mode and parallel extraction
+- Uses YAML specifications (`test/fixtures/types.yaml`, `test/fixtures/tactics.yaml`) for expected outputs
+- Extracts data once per test session (module-scoped fixtures)
+- Three types of assertions:
+  - **Exact matches**: Full field equality for specific constants (e.g., verifying exact tactic strings)
+  - **Property checks**: Substring matching and nullability checks (e.g., tactics containing "rw")
+  - **Count checks**: Minimum records and required name/tactic existence
+- Tests verify schema structure, goal formatting, and parallel extraction correctness
 
-4. **Integration Script** (`./run_tests`):
-   - Runs all Python unit tests sequentially by explicitly listing test files
-   - **IMPORTANT**: When adding new test files, update this script to include them
-   - Current test files: `test_types.py`, `test_tactics.py`, `test_parallel.py`, `test_query_library.py`, `test_schema.py`
-   - Validates full end-to-end pipeline
+**Test Project** (`test_project/`)
+- Minimal Lean project with Scout as a dependency
+- Contains simple theorems in `Basic.lean` and `Lists.lean`
+- Used to verify extractors work correctly in dependency mode
+
+**Helper Utilities** (`test/helpers.py`)
+- Shared extraction functions:
+  - `extract_from_dependency_types()`: Runs types extractor with `--imports` mode
+  - `extract_from_dependency_library()`: Runs any extractor with `--library` mode and parallel support
+- Shared `build_test_project` fixture: Builds test_project once per test session
+- Test files contain their own dataset loading and query helpers specific to each extractor
+
+**Integration Script** (`./run_tests`)
+- Runs all tests in three phases
+- Phase 0: Lean schema tests (`lake test`)
+- Phase 1: Infrastructure tests (34 tests)
+- Phase 2: Extractor tests
+- Provides comprehensive validation of the entire system
 
 ## Adding a New Data Extractor
 
@@ -314,14 +352,18 @@ The test suite consists of:
        { name := "data", nullable := true, type := .string }
      ]
      key := "id"
-     go handle
+     go sink
      | .imports tgt => tgt.runCoreM <| Meta.MetaM.run' do
        -- Your extraction logic here
-       handle.putStrLn <| Json.compress <| json% { id : "...", data : "..." }
-     | _ => throw <| .userError "Unsupported Target"
+       sink <| json% { id : "...", data : "..." }
+     | .input tgt =>
+       -- For file-based extraction
+       throw <| .userError "Unsupported Target"
    ```
 3. Import in `LeanScout/DataExtractors.lean`
 4. Rebuild and run: `lake run scout --command mycommand --imports Lean`
+
+Note: The `go` function receives a `sink` function for writing JSON records. Call `sink` with JSON objects to output data.
 
 ## Python Dataset Creation
 

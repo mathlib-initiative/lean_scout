@@ -26,7 +26,6 @@ deriving BEq
 
 end
 
-/-- Arrow schema -/
 structure Schema where
   fields : List Field
 deriving BEq
