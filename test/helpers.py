@@ -1,5 +1,6 @@
 """Helper utilities for testing data extractors."""
 import subprocess
+import json
 from pathlib import Path
 from datasets import Dataset
 import pytest
@@ -93,3 +94,19 @@ def assert_record_contains(actual, field: str, substring: str):
 def assert_record_not_null(actual, field: str):
     assert field in actual, f"Field '{field}' not found in record"
     assert actual[field] is not None, f"Field '{field}' is None"
+
+
+def get_schema_json(command: str) -> dict:
+    """Query Lean for schema JSON of a given command."""
+    result = subprocess.run(
+        ["lake", "exe", "lean_scout", "--command", command, "--schema"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    schema_json = result.stdout.strip()
+    if not schema_json:
+        raise RuntimeError(f"No schema output for command '{command}'")
+
+    return json.loads(schema_json)

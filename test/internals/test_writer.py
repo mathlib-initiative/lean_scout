@@ -11,6 +11,7 @@ import pytest
 import tempfile
 import threading
 from pathlib import Path
+from typing import cast, Any
 from datasets import Dataset
 import glob
 import pyarrow as pa
@@ -211,16 +212,18 @@ def test_writer_output_files_valid(simple_schema, writer_dir):
     writer.close()
 
     # Verify we can load the parquet files
-    parquet_files = glob.glob(str(writer_dir / "*.parquet"))
-    assert len(parquet_files) > 0, "Should create parquet files"
+    parquet_paths = list(writer_dir.glob("*.parquet"))
+    assert len(parquet_paths) > 0, "Should create parquet files"
 
     # Load and verify data
-    dataset = Dataset.from_parquet(parquet_files)
+    dataset = cast(Dataset, Dataset.from_parquet([str(p) for p in parquet_paths]))
     assert len(dataset) == len(test_data), "Should have all records in dataset"
 
     # Verify schema
-    assert "name" in dataset.column_names
-    assert "value" in dataset.column_names
+    column_names = dataset.column_names
+    assert column_names is not None
+    assert "name" in column_names
+    assert "value" in column_names
 
 
 def test_writer_nullable_fields(writer_dir):
@@ -245,8 +248,9 @@ def test_writer_nullable_fields(writer_dir):
     assert stats["total_rows"] == 2
 
     # Verify nullable fields in output
-    dataset = Dataset.from_parquet(glob.glob(str(writer_dir / "*.parquet")))
-    records = list(dataset)
+    parquet_paths = list(writer_dir.glob("*.parquet"))
+    dataset = cast(Dataset, Dataset.from_parquet([str(p) for p in parquet_paths]))
+    records: list[dict[str, Any]] = [dict(record) for record in dataset]
 
     # Find the record with None value
     none_record = next(r for r in records if r["name"] == "bar")
