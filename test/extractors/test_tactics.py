@@ -3,7 +3,7 @@ import pytest
 import yaml
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 import sys
 import glob
 from datasets import Dataset
@@ -21,7 +21,10 @@ def load_tactics_dataset(tactics_dir: Path) -> Dataset:
     if not parquet_files:
         raise RuntimeError(f"No parquet files found in {tactics_dir}")
 
-    return Dataset.from_parquet(parquet_files)  # type: ignore[arg-type]
+    # Dataset.from_parquet returns Dataset when given a list of file paths
+    result = Dataset.from_parquet(cast(Any, parquet_files))
+    assert isinstance(result, Dataset)
+    return result
 
 
 def get_records_by_tactic(dataset: Dataset, tactic: str):

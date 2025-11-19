@@ -4,6 +4,7 @@ import yaml
 import tempfile
 import subprocess
 from pathlib import Path
+from typing import Any, cast
 import sys
 import glob
 from datasets import Dataset
@@ -12,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from helpers import (
     TEST_PROJECT_DIR,
-    build_test_project,
     get_record_by_name,
     assert_record_exact_match,
     assert_record_contains,
@@ -41,11 +41,14 @@ def load_types_dataset(types_dir: Path) -> Dataset:
     if not parquet_files:
         raise RuntimeError(f"No parquet files found in {types_dir}")
 
-    return Dataset.from_parquet(parquet_files)  # type: ignore[arg-type]
+    # Dataset.from_parquet returns Dataset when given a list of file paths
+    result = Dataset.from_parquet(cast(Any, parquet_files))
+    assert isinstance(result, Dataset)
+    return result
 
 
 @pytest.fixture(scope="module")
-def types_dataset_imports(build_test_project):
+def types_dataset_imports():
     with tempfile.TemporaryDirectory() as tmpdir:
         data_dir = Path(tmpdir)
         types_dir = extract_from_dependency_types(

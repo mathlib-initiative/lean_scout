@@ -3,25 +3,9 @@ import subprocess
 import json
 from pathlib import Path
 from datasets import Dataset
-import pytest
 
 
 TEST_PROJECT_DIR = Path(__file__).parent.parent / "test_project"
-
-
-@pytest.fixture(scope="module", autouse=True)
-def build_test_project():
-    result = subprocess.run(
-        ["lake", "build"],
-        cwd=str(TEST_PROJECT_DIR),
-        capture_output=True,
-        text=True
-    )
-
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"Failed to build test project:\nstdout: {result.stdout}\nstderr: {result.stderr}"
-        )
 
 
 def extract_from_dependency_library(command: str, library: str, data_dir: Path,
