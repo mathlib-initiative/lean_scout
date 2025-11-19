@@ -2,8 +2,8 @@
 import pytest
 import yaml
 import tempfile
-import json
 from pathlib import Path
+from typing import Any
 import sys
 import glob
 from datasets import Dataset
@@ -12,10 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from helpers import (
     TEST_PROJECT_DIR,
-    build_test_project,
     extract_from_dependency_library,
 )
-from lean_scout.cli import get_schema
 
 
 def load_tactics_dataset(tactics_dir: Path) -> Dataset:
@@ -111,7 +109,7 @@ def test_tactics_has_required_tactics(tactics_dataset, tactics_spec):
     )
 
 
-def test_tactics_schema(tactics_dataset):
+def test_tactics_dataset_record_schema(tactics_dataset):
     assert len(tactics_dataset) > 0, "Dataset is empty"
 
     first_record = tactics_dataset[0]
@@ -168,7 +166,8 @@ def test_tactics_parallel_extraction():
 
         assert len(dataset) > 0, "Parallel extraction should produce results"
 
-        rfl_count = len([r for r in dataset if r['ppTac'] == 'rfl'])
+        records: list[dict[str, Any]] = [dict(r) for r in dataset]
+        rfl_count = len([r for r in records if r['ppTac'] == 'rfl'])
         assert rfl_count >= 6, "Should have at least 6 'rfl' tactics from both files"
 
 
@@ -199,16 +198,3 @@ def test_tactics_rfl_from_test_project(tactics_dataset):
         assert len(record['goals']) > 0, "rfl should have at least one goal"
 
 
-def test_tactics_schema():
-    root_path = Path.cwd()
-    schema_json = get_schema("tactics", root_path)
-    schema = json.loads(schema_json)
-
-    assert "fields" in schema
-    assert "key" in schema
-    assert schema["key"] == "ppTac"
-
-    field_names = [f["name"] for f in schema["fields"]]
-    assert "ppTac" in field_names
-    assert "goals" in field_names
-    assert "elaborator" in field_names

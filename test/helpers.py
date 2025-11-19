@@ -24,22 +24,6 @@ def build_test_project():
         )
 
 
-def extract_from_dependency_types(library: str, data_dir: Path, working_dir: Path) -> Path:
-    subprocess.run(
-        ["lake", "run", "scout", "--command", "types", "--dataDir", str(data_dir), "--imports", library],
-        capture_output=True,
-        text=True,
-        check=True,
-        cwd=str(working_dir)
-    )
-
-    types_dir = data_dir / "types"
-    if not types_dir.exists():
-        raise RuntimeError(f"Types directory not created: {types_dir}")
-
-    return types_dir
-
-
 def extract_from_dependency_library(command: str, library: str, data_dir: Path,
                                      working_dir: Path, parallel: int = 1) -> Path:
     subprocess.run(

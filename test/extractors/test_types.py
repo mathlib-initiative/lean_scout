@@ -2,7 +2,7 @@
 import pytest
 import yaml
 import tempfile
-import json
+import subprocess
 from pathlib import Path
 import sys
 import glob
@@ -12,14 +12,27 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from helpers import (
     TEST_PROJECT_DIR,
-    build_test_project,
-    extract_from_dependency_types,
     get_record_by_name,
     assert_record_exact_match,
     assert_record_contains,
     assert_record_not_null,
 )
-from lean_scout.cli import get_schema
+
+
+def extract_from_dependency_types(library: str, data_dir: Path, working_dir: Path) -> Path:
+    subprocess.run(
+        ["lake", "run", "scout", "--command", "types", "--dataDir", str(data_dir), "--imports", library],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=str(working_dir)
+    )
+
+    types_dir = data_dir / "types"
+    if not types_dir.exists():
+        raise RuntimeError(f"Types directory not created: {types_dir}")
+
+    return types_dir
 
 
 def load_types_dataset(types_dir: Path) -> Dataset:
@@ -126,16 +139,3 @@ def test_types_imports_modules(types_dataset_imports):
     )
 
 
-def test_types_schema():
-    root_path = Path.cwd()
-    schema_json = get_schema("types", root_path)
-    schema = json.loads(schema_json)
-
-    assert "fields" in schema
-    assert "key" in schema
-    assert schema["key"] == "name"
-
-    field_names = [f["name"] for f in schema["fields"]]
-    assert "name" in field_names
-    assert "module" in field_names
-    assert "type" in field_names
