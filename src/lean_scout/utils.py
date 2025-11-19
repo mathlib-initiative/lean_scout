@@ -1,6 +1,6 @@
 """Utility functions for Lean Scout."""
 import json
-from typing import Iterator, Optional
+from typing import Iterator
 import pyarrow as pa
 
 

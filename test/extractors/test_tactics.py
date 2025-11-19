@@ -2,8 +2,11 @@
 import pytest
 import yaml
 import tempfile
+import json
 from pathlib import Path
 import sys
+import glob
+from datasets import Dataset
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -11,11 +14,34 @@ from helpers import (
     TEST_PROJECT_DIR,
     build_test_project,
     extract_from_dependency_library,
-    load_tactics_dataset,
-    get_records_by_tactic,
-    get_records_by_tactic_contains,
-    assert_tactic_contains,
 )
+from lean_scout.cli import get_schema
+
+
+def load_tactics_dataset(tactics_dir: Path) -> Dataset:
+    parquet_files = glob.glob(str(tactics_dir / "*.parquet"))
+    if not parquet_files:
+        raise RuntimeError(f"No parquet files found in {tactics_dir}")
+
+    return Dataset.from_parquet(parquet_files)  # type: ignore[arg-type]
+
+
+def get_records_by_tactic(dataset: Dataset, tactic: str):
+    matches = dataset.filter(lambda x: x['ppTac'] == tactic)
+    return [matches[i] for i in range(len(matches))]
+
+
+def get_records_by_tactic_contains(dataset: Dataset, substring: str):
+    matches = dataset.filter(lambda x: substring in x['ppTac'])
+    return [matches[i] for i in range(len(matches))]
+
+
+def assert_tactic_contains(dataset: Dataset, substring: str, min_count: int = 1):
+    matches = get_records_by_tactic_contains(dataset, substring)
+    assert len(matches) >= min_count, (
+        f"Expected at least {min_count} tactics containing '{substring}', "
+        f"found {len(matches)}"
+    )
 
 
 @pytest.fixture(scope="module")
@@ -171,3 +197,18 @@ def test_tactics_rfl_from_test_project(tactics_dataset):
 
     for record in rfl_records:
         assert len(record['goals']) > 0, "rfl should have at least one goal"
+
+
+def test_tactics_schema():
+    root_path = Path.cwd()
+    schema_json = get_schema("tactics", root_path)
+    schema = json.loads(schema_json)
+
+    assert "fields" in schema
+    assert "key" in schema
+    assert schema["key"] == "ppTac"
+
+    field_names = [f["name"] for f in schema["fields"]]
+    assert "ppTac" in field_names
+    assert "goals" in field_names
+    assert "elaborator" in field_names

@@ -1,12 +1,17 @@
 """Orchestrates Lean subprocess execution and coordinates data writing."""
 import subprocess
 import sys
-from typing import Optional, List
+from typing import Optional, List, Protocol, IO, Any
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .utils import stream_json_lines
 from .writer import ShardedParquetWriter
+
+
+class ProcessProtocol(Protocol):
+    """Protocol for subprocess-like objects that can be used for extraction."""
+    stdout: Optional[IO[Any]]
 
 
 class Orchestrator:
@@ -199,12 +204,12 @@ class Orchestrator:
                 f"stderr: {stderr_output}"
             )
 
-    def _process_subprocess_output(self, process: subprocess.Popen) -> None:
+    def _process_subprocess_output(self, process: ProcessProtocol) -> None:
         """
         Read JSON lines from subprocess stdout and feed to writer.
 
         Args:
-            process: subprocess.Popen instance with stdout to read
+            process: Process-like object with stdout to read
         """
         if not process.stdout:
             raise RuntimeError("Subprocess stdout is not available")

@@ -2,7 +2,6 @@
 import subprocess
 from pathlib import Path
 from datasets import Dataset
-import glob
 import pytest
 
 
@@ -58,22 +57,6 @@ def extract_from_dependency_library(command: str, library: str, data_dir: Path,
     return output_dir
 
 
-def load_types_dataset(types_dir: Path) -> Dataset:
-    parquet_files = glob.glob(str(types_dir / "*.parquet"))
-    if not parquet_files:
-        raise RuntimeError(f"No parquet files found in {types_dir}")
-
-    return Dataset.from_parquet(parquet_files)  # type: ignore[arg-type]
-
-
-def load_tactics_dataset(tactics_dir: Path) -> Dataset:
-    parquet_files = glob.glob(str(tactics_dir / "*.parquet"))
-    if not parquet_files:
-        raise RuntimeError(f"No parquet files found in {tactics_dir}")
-
-    return Dataset.from_parquet(parquet_files)  # type: ignore[arg-type]
-
-
 def get_record_by_name(dataset: Dataset, name: str):
     matches = dataset.filter(lambda x: x['name'] == name)
 
@@ -84,16 +67,6 @@ def get_record_by_name(dataset: Dataset, name: str):
         raise RuntimeError(f"Multiple records found for name '{name}'")
 
     return matches[0]
-
-
-def get_records_by_tactic(dataset: Dataset, tactic: str):
-    matches = dataset.filter(lambda x: x['ppTac'] == tactic)
-    return [matches[i] for i in range(len(matches))]
-
-
-def get_records_by_tactic_contains(dataset: Dataset, substring: str):
-    matches = dataset.filter(lambda x: substring in x['ppTac'])
-    return [matches[i] for i in range(len(matches))]
 
 
 def assert_record_exact_match(actual, expected):
@@ -120,11 +93,3 @@ def assert_record_contains(actual, field: str, substring: str):
 def assert_record_not_null(actual, field: str):
     assert field in actual, f"Field '{field}' not found in record"
     assert actual[field] is not None, f"Field '{field}' is None"
-
-
-def assert_tactic_contains(dataset: Dataset, substring: str, min_count: int = 1):
-    matches = get_records_by_tactic_contains(dataset, substring)
-    assert len(matches) >= min_count, (
-        f"Expected at least {min_count} tactics containing '{substring}', "
-        f"found {len(matches)}"
-    )

@@ -10,6 +10,7 @@ import pytest
 import tempfile
 from pathlib import Path
 from io import StringIO
+from typing import Optional, IO, Any
 import pyarrow as pa
 
 from lean_scout.orchestrator import Orchestrator
@@ -17,8 +18,20 @@ from lean_scout.writer import ShardedParquetWriter
 
 
 class FakeProcess:
-    def __init__(self, stdout):
+    """Minimal fake process for testing that implements the Popen interface subset we need."""
+
+    def __init__(self, stdout: Optional[IO[Any]]):
         self.stdout = stdout
+        self.stderr: Optional[IO[Any]] = None
+        self.returncode: Optional[int] = None
+
+    def wait(self) -> int:
+        """Mock wait that returns 0 (success)."""
+        return 0
+
+    def poll(self) -> Optional[int]:
+        """Mock poll that returns None (still running)."""
+        return None
 
 
 @pytest.fixture

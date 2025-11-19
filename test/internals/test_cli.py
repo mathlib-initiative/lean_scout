@@ -4,17 +4,14 @@ This module tests the CLI's core functionality without extracting Lean data.
 Tests focus on:
 - File list reading
 - Library path querying
-- Schema querying
 """
 import pytest
 import tempfile
-import json
 from pathlib import Path
 
 from lean_scout.cli import (
     read_file_list,
     query_library_paths,
-    get_schema,
 )
 
 
@@ -70,36 +67,6 @@ def test_query_library_paths_failure():
 
     with pytest.raises(RuntimeError, match="Failed to query module paths"):
         query_library_paths("NonexistentLib", test_project_dir)
-
-
-def test_get_schema_types():
-    root_path = Path.cwd()
-    schema_json = get_schema("types", root_path)
-    schema = json.loads(schema_json)
-
-    assert "fields" in schema
-    assert "key" in schema
-    assert schema["key"] == "name"
-
-    field_names = [f["name"] for f in schema["fields"]]
-    assert "name" in field_names
-    assert "module" in field_names
-    assert "type" in field_names
-
-
-def test_get_schema_tactics():
-    root_path = Path.cwd()
-    schema_json = get_schema("tactics", root_path)
-    schema = json.loads(schema_json)
-
-    assert "fields" in schema
-    assert "key" in schema
-    assert schema["key"] == "ppTac"
-
-    field_names = [f["name"] for f in schema["fields"]]
-    assert "ppTac" in field_names
-    assert "goals" in field_names
-    assert "elaborator" in field_names
 
 
 def test_read_file_list_whitespace_handling():

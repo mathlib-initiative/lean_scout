@@ -2,8 +2,11 @@
 import pytest
 import yaml
 import tempfile
+import json
 from pathlib import Path
 import sys
+import glob
+from datasets import Dataset
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -11,12 +14,20 @@ from helpers import (
     TEST_PROJECT_DIR,
     build_test_project,
     extract_from_dependency_types,
-    load_types_dataset,
     get_record_by_name,
     assert_record_exact_match,
     assert_record_contains,
     assert_record_not_null,
 )
+from lean_scout.cli import get_schema
+
+
+def load_types_dataset(types_dir: Path) -> Dataset:
+    parquet_files = glob.glob(str(types_dir / "*.parquet"))
+    if not parquet_files:
+        raise RuntimeError(f"No parquet files found in {types_dir}")
+
+    return Dataset.from_parquet(parquet_files)  # type: ignore[arg-type]
 
 
 @pytest.fixture(scope="module")
@@ -113,3 +124,18 @@ def test_types_imports_modules(types_dataset_imports):
     assert expected_modules.issubset(modules), (
         f"Expected modules {expected_modules} to be in dataset modules"
     )
+
+
+def test_types_schema():
+    root_path = Path.cwd()
+    schema_json = get_schema("types", root_path)
+    schema = json.loads(schema_json)
+
+    assert "fields" in schema
+    assert "key" in schema
+    assert schema["key"] == "name"
+
+    field_names = [f["name"] for f in schema["fields"]]
+    assert "name" in field_names
+    assert "module" in field_names
+    assert "type" in field_names
