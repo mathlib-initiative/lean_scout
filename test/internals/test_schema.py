@@ -7,7 +7,7 @@ import subprocess
 
 def test_schema_invalid_command():
     result = subprocess.run(
-        ["lake", "exe", "lean_scout", "--command", "nonexistent", "--schema"],
+        ["lake", "exe", "-q", "lean_scout", "--command", "nonexistent", "--schema"],
         capture_output=True,
         text=True,
     )

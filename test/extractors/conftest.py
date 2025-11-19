@@ -11,7 +11,7 @@ TEST_PROJECT_DIR = Path(__file__).parent.parent.parent / "test_project"
 def build_test_project():
     """Build the test project before running extractor tests."""
     result = subprocess.run(
-        ["lake", "build"],
+        ["lake", "-q", "build"],
         cwd=str(TEST_PROJECT_DIR),
         capture_output=True,
         text=True

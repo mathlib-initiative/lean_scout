@@ -87,7 +87,7 @@ def get_schema(command: str, root_path: Path) -> str:
         RuntimeError: If schema query fails
     """
     result = subprocess.run(
-        ["lake", "exe", "lean_scout", "--command", command, "--schema"],
+        ["lake", "exe", "-q", "lean_scout", "--command", command, "--schema"],
         cwd=root_path,
         capture_output=True,
         text=True,
@@ -222,7 +222,7 @@ Examples:
     if args.command == "extractors":
         root_path = Path(args.rootPath).resolve()
         result = subprocess.run(
-            ["lake", "exe", "lean_scout", "--command", "extractors"],
+            ["lake", "exe", "-q", "lean_scout", "--command", "extractors"],
             cwd=root_path,
         )
         sys.exit(result.returncode)

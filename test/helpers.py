@@ -67,7 +67,7 @@ def assert_record_not_null(actual, field: str):
 def get_schema_json(command: str) -> dict:
     """Query Lean for schema JSON of a given command."""
     result = subprocess.run(
-        ["lake", "exe", "lean_scout", "--command", command, "--schema"],
+        ["lake", "exe", "-q", "lean_scout", "--command", command, "--schema"],
         capture_output=True,
         text=True,
         check=True,
