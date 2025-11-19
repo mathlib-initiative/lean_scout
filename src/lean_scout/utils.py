@@ -13,7 +13,7 @@ def stream_json_lines(input_stream) -> Iterator[dict]:
         try:
             yield json.loads(line)
         except json.JSONDecodeError:
-            continue  # skip malformed lines
+            continue 
 
 
 def datatype_from_json(type_obj: dict) -> pa.DataType:
@@ -60,17 +60,3 @@ def deserialize_schema(json_str: str) -> pa.Schema:
     """Deserialize PyArrow schema from JSON string."""
     schema_obj = json.loads(json_str)
     return schema_from_json(schema_obj)
-
-
-def load_schema(schema_str: Optional[str] = None, schema_file: Optional[str] = None) -> pa.Schema:
-    """Load PyArrow schema from pandas-compatible JSON string or file."""
-    schema_json = None
-    if schema_str:
-        schema_json = schema_str
-    elif schema_file:
-        with open(schema_file, 'r') as f:
-            schema_json = f.read()
-    else:
-        raise ValueError("Either --schema or --schema-file must be provided")
-
-    return deserialize_schema(schema_json)

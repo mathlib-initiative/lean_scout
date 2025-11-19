@@ -55,81 +55,86 @@ class Orchestrator:
         Returns:
             Dictionary with statistics: total_rows, num_shards, etc.
         """
-        # Imports target: single subprocess
-        if self.imports:
-            sys.stderr.write("Running single subprocess for imports target...\n")
-            process = self._spawn_lean_subprocess()
-            self._process_subprocess_output(process)
 
-            # Wait for subprocess to complete
-            returncode = process.wait()
-            if returncode != 0:
-                stderr_output = process.stderr.read() if process.stderr else ""
-                raise RuntimeError(
-                    f"Lean subprocess failed with exit code {returncode}\n"
-                    f"stderr: {stderr_output}"
-                )
+        if self.imports: self._run_imports()
 
-        # Read target: parallel subprocesses (one per file)
         elif self.read_files:
             num_files = len(self.read_files)
 
-            # For single file, run sequentially
-            if num_files == 1:
-                sys.stderr.write(f"Processing single file: {self.read_files[0]}\n")
-                process = self._spawn_lean_subprocess(self.read_files[0])
-                self._process_subprocess_output(process)
+            if num_files == 1: self._run_single_file()
 
-                returncode = process.wait()
-                if returncode != 0:
-                    stderr_output = process.stderr.read() if process.stderr else ""
-                    raise RuntimeError(
-                        f"Lean subprocess failed with exit code {returncode}\n"
-                        f"File: {self.read_files[0]}\n"
-                        f"stderr: {stderr_output}"
-                    )
+            else: self._run_multiple_files()
 
-            # For multiple files, run in parallel
-            else:
-                # Determine actual number of workers
-                max_workers = min(self.num_workers, num_files)
-                sys.stderr.write(
-                    f"Processing {num_files} files in parallel with {max_workers} workers...\n"
-                )
-
-                # Use ThreadPoolExecutor for parallel execution
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    # Submit all file processing tasks
-                    future_to_file = {
-                        executor.submit(self._process_file, file_path): file_path
-                        for file_path in self.read_files
-                    }
-
-                    # Wait for completion and collect errors
-                    completed = 0
-                    failed = 0
-                    errors = []
-                    for future in as_completed(future_to_file):
-                        file_path = future_to_file[future]
-                        try:
-                            future.result()
-                            completed += 1
-                            sys.stderr.write(f"  [{completed + failed}/{num_files}] Completed: {file_path}\n")
-                        except Exception as exc:
-                            failed += 1
-                            error_msg = f"{file_path}: {exc}"
-                            errors.append(error_msg)
-                            sys.stderr.write(f"  [{completed + failed}/{num_files}] Failed: {error_msg}\n")
-
-                    # Raise error if any files failed
-                    if errors:
-                        raise RuntimeError(
-                            f"Failed to process {failed}/{num_files} files:\n" +
-                            "\n".join(f"  - {err}" for err in errors)
-                        )
-
-        # Close writer and get statistics
         return self.writer.close()
+
+    def _run_imports(self) -> None:
+        sys.stderr.write("Running single subprocess for imports target...\n")
+        process = self._spawn_lean_subprocess()
+        self._process_subprocess_output(process)
+
+        # Wait for subprocess to complete
+        returncode = process.wait()
+        if returncode != 0:
+            stderr_output = process.stderr.read() if process.stderr else ""
+            raise RuntimeError(
+                f"Lean subprocess failed with exit code {returncode}\n"
+                f"stderr: {stderr_output}"
+            )
+
+    def _run_single_file(self) -> None:
+
+        assert self.read_files is not None and len(self.read_files) == 1, "Expected exactly one read file"
+
+        sys.stderr.write(f"Processing single file: {self.read_files[0]}\n")
+        process = self._spawn_lean_subprocess(self.read_files[0])
+        self._process_subprocess_output(process)
+
+        returncode = process.wait()
+        if returncode != 0:
+            stderr_output = process.stderr.read() if process.stderr else ""
+            raise RuntimeError(
+                f"Lean subprocess failed with exit code {returncode}\n"
+                f"File: {self.read_files[0]}\n"
+                f"stderr: {stderr_output}"
+            )
+
+    def _run_multiple_files(self) -> None:
+
+        assert self.read_files is not None and len(self.read_files) > 1, "Expected multiple read files"
+
+        num_files = len(self.read_files)
+        max_workers = min(self.num_workers, num_files)
+
+        sys.stderr.write(
+            f"Processing {num_files} files in parallel with {max_workers} workers...\n"
+        )
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_file = {
+                executor.submit(self._process_file, file_path): file_path
+                for file_path in self.read_files
+            }
+
+            completed = 0
+            failed = 0
+            errors = []
+            for future in as_completed(future_to_file):
+                file_path = future_to_file[future]
+                try:
+                    future.result()
+                    completed += 1
+                    sys.stderr.write(f"  [{completed + failed}/{num_files}] Completed: {file_path}\n")
+                except Exception as exc:
+                    failed += 1
+                    error_msg = f"{file_path}: {exc}"
+                    errors.append(error_msg)
+                    sys.stderr.write(f"  [{completed + failed}/{num_files}] Failed: {error_msg}\n")
+
+            if errors:
+                raise RuntimeError(
+                    f"Failed to process {failed}/{num_files} files:\n" +
+                    "\n".join(f"  - {err}" for err in errors)
+                )
 
     def _spawn_lean_subprocess(self, file_path: Optional[str] = None) -> subprocess.Popen:
         """
@@ -141,23 +146,20 @@ class Orchestrator:
         Returns:
             subprocess.Popen instance
         """
-        # Build command line arguments
+
+        assert self.imports or file_path, "Either imports or file_path must be specified"
+
         args = [
             "lake", "exe", "lean_scout",
             "--command", self.command,
         ]
 
-        # Add target specification
         if self.imports:
             args.append("--imports")
             args.extend(self.imports)
         elif file_path:
             args.extend(["--read", file_path])
-        elif self.read_files:
-            # Use first file if no specific file_path provided
-            args.extend(["--read", self.read_files[0]])
 
-        # Spawn subprocess
         # stdout: piped for JSON output
         # stderr: captured for error reporting
         # stdin: closed (not needed)
@@ -178,7 +180,6 @@ class Orchestrator:
         Process a single file: spawn subprocess, read output, write to shared writer.
 
         This method is called by ThreadPoolExecutor for parallel file processing.
-        Thread-safe due to ShardedParquetWriter's locking.
 
         Args:
             file_path: Path to Lean file to process
@@ -189,7 +190,6 @@ class Orchestrator:
         process = self._spawn_lean_subprocess(file_path)
         self._process_subprocess_output(process)
 
-        # Wait for subprocess to complete
         returncode = process.wait()
         if returncode != 0:
             stderr_output = process.stderr.read() if process.stderr else ""
@@ -203,15 +203,11 @@ class Orchestrator:
         """
         Read JSON lines from subprocess stdout and feed to writer.
 
-        Thread-safe: Multiple threads can call this concurrently.
-
         Args:
             process: subprocess.Popen instance with stdout to read
         """
         if not process.stdout:
             raise RuntimeError("Subprocess stdout is not available")
 
-        # Stream JSON lines and add to writer
-        # Writer is thread-safe, so this is safe for parallel execution
         for record in stream_json_lines(process.stdout):
             self.writer.add_record(record)

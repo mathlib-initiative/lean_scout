@@ -51,7 +51,7 @@ def query_library_paths(library: str, root_path: Path) -> List[str]:
         List of file paths from the library
 
     Raises:
-        RuntimeError: If lake query fails or returns no paths
+        RuntimeError: If lake query fails
     """
     result = subprocess.run(
         ["lake", "query", "-q", f"{library}:module_paths"],
@@ -67,11 +67,7 @@ def query_library_paths(library: str, root_path: Path) -> List[str]:
             f"stderr: {result.stderr}"
         )
 
-    # Parse output (one file path per line)
     lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-
-    if not lines:
-        raise RuntimeError(f"No module paths found for library '{library}'")
 
     return lines
 
@@ -119,10 +115,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Extract types from Lean standard library
+  # Extract types from Lean as an imported module
   lean-scout --command types --imports Lean
 
-  # Extract types from Mathlib (if available as dependency)
+  # Extract types from Mathlib as an imported module (if available as dependency)
   lean-scout --command types --imports Mathlib
 
   # Extract tactics from a specific file
@@ -156,7 +152,7 @@ Examples:
         help="Lean file(s) to read and process. Multiple files will be processed in parallel."
     )
     target_group.add_argument(
-        "--read-list",
+        "--readList",
         help="File containing list of Lean files to read (one per line). Files will be processed in parallel."
     )
     target_group.add_argument(
@@ -192,7 +188,7 @@ Examples:
         type=int,
         default=1,
         help="Number of parallel workers for file extraction (default: 1). "
-             "Only applies to --read/--read-list with multiple files. "
+             "Only applies to --read/--readList with multiple files. "
              "Actual workers used: min(num_files, --parallel)"
     )
 
@@ -210,6 +206,11 @@ Examples:
         )
         args.parallel = MAX_WORKERS
 
+    if args.numShards < 1:
+        parser.error(f"--numShards must be at least 1, got {args.numShards}")
+    if args.numShards > 999:
+        parser.error(f"--numShards cannot exceed 999, got {args.numShards}")
+
     # Handle special "extractors" command early (before validation)
     if args.command == "extractors":
         root_path = Path(args.rootPath).resolve()
@@ -220,8 +221,8 @@ Examples:
         sys.exit(result.returncode)
 
     # Validate that target is specified for all other commands
-    if not args.imports and not args.read and not args.read_list and not args.library:
-        parser.error("one of the arguments --imports --read --read-list --library is required (except for 'extractors' command)")
+    if not args.imports and not args.read and not args.readList and not args.library:
+        parser.error("one of the arguments --imports --read --readList --library is required (except for 'extractors' command)")
 
     # Convert paths
     root_path = Path(args.rootPath).resolve()
@@ -237,16 +238,16 @@ Examples:
         sys.exit(1)
 
     # Create output directory
-    base_path.mkdir(parents=True, exist_ok=True)
+    base_path.mkdir(parents=True, exist_ok=False)
 
     try:
         # Determine read files list
         read_files = None
         if args.read:
             read_files = args.read
-        elif args.read_list:
-            sys.stderr.write(f"Reading file list from: {args.read_list}\n")
-            read_files = read_file_list(args.read_list)
+        elif args.readList:
+            sys.stderr.write(f"Reading file list from: {args.readList}\n")
+            read_files = read_file_list(args.readList)
             sys.stderr.write(f"Found {len(read_files)} files to process\n")
         elif args.library:
             sys.stderr.write(f"Querying module paths for library: {args.library}\n")
@@ -260,7 +261,9 @@ Examples:
 
         # Extract shard key from schema metadata
         schema_obj = json.loads(schema_json)
-        key = schema_obj.get("key", "name")
+        if "key" not in schema_obj:
+            raise ValueError(f"Schema for command '{args.command}' missing required 'key' field")
+        key = schema_obj["key"]
 
         # Create writer
         writer = ShardedParquetWriter(
@@ -300,7 +303,6 @@ Examples:
             shutil.rmtree(base_path)
         sys.stderr.write(f"Error: {e}\n")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
