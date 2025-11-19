@@ -151,7 +151,7 @@ class Orchestrator:
         assert self.imports or file_path, "Either imports or file_path must be specified"
 
         args = [
-            "lake", "exe", "lean_scout",
+            "lake", "exe", "-q", "lean_scout",
             "--command", self.command,
         ]
 
