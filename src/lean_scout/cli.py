@@ -124,7 +124,10 @@ Examples:
   # Extract tactics from a specific file
   lean-scout --command tactics --read LeanScoutTest/TacticsTest.lean
 
-  # Extract from all modules in a library
+  # Extract from all modules in a library (uses CPU count workers by default)
+  lean-scout --command tactics --library LeanScoutTest
+
+  # Limit parallel workers (default is CPU count)
   lean-scout --command tactics --library LeanScoutTest --parallel 4
 
   # Specify custom data directory and sharding
@@ -163,8 +166,8 @@ Examples:
     # Optional arguments
     parser.add_argument(
         "--dataDir",
-        default=".",
-        help="Base output directory (default: current directory)"
+        default=None,
+        help="Base output directory (default: rootPath)"
     )
     parser.add_argument(
         "--numShards",
@@ -186,9 +189,9 @@ Examples:
     parser.add_argument(
         "--parallel",
         type=int,
-        default=1,
-        help="Number of parallel workers for file extraction (default: 1). "
-             "Only applies to --read/--readList with multiple files. "
+        default=None,
+        help="Number of parallel workers for file extraction (default: CPU count). "
+             "Only applies to --read/--readList/--library with multiple files. "
              "Actual workers used: min(num_files, --parallel)"
     )
 
@@ -197,6 +200,10 @@ Examples:
     # Validate --parallel flag
     # Use number of CPU cores as maximum (default to 32 if can't determine)
     MAX_WORKERS = os.cpu_count() or 32
+
+    # Set default parallel workers to CPU count if not specified
+    if args.parallel is None:
+        args.parallel = MAX_WORKERS
     if args.parallel < 1:
         parser.error(f"--parallel must be at least 1, got {args.parallel}")
     if args.parallel > MAX_WORKERS:
@@ -226,7 +233,7 @@ Examples:
 
     # Convert paths
     root_path = Path(args.rootPath).resolve()
-    data_dir = Path(args.dataDir).resolve()
+    data_dir = Path(args.dataDir if args.dataDir is not None else args.rootPath).resolve()
 
     # Determine output path
     base_path = data_dir / args.command
