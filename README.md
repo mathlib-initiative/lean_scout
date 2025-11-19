@@ -163,12 +163,12 @@ structure DataExtractor where
 ```
 
 Where:
-- `schema` is an Arrow-compatible schema defining the output structure. It's serialized to JSON and queried by the Python orchestrator before extraction begins.
-- `key` is the field name used to compute the shard ID (via BLAKE2b hashing) for distributing data across shards.
-- `go` is the main extraction function that:
+- `schema`: An Arrow-compatible schema defining the output structure. Serialized to JSON and queried by the Python orchestrator before extraction begins.
+- `key`: The field name used to compute the shard ID (via BLAKE2b hashing) for distributing data across shards.
+- `go`: The main extraction function that:
   - Takes a `sink` function (`Json → IO Unit`) for writing JSON records
   - Takes a `Target` specifying what to extract from (`.imports` or `.input`)
-  - Extracts data and writes JSON records by calling the sink
+  - Extracts data and writes JSON records by calling the sink function
 
 ### Example: Creating a Custom Extractor
 
@@ -237,11 +237,14 @@ uv run pytest test/extractors/ -v # Phase 2: Extractor tests only
 - Focus: Schema querying, writer logic, orchestrator, CLI utilities
 - 34 tests using real subprocess calls (no mocking)
 - Fast execution (no Lean data extraction)
+- Files: `test_schema.py`, `test_writer.py`, `test_orchestrator.py`, `test_cli.py`
 
 **Phase 2: Data Extractor Tests** (`test/extractors/`)
 - Tests data extractors using `test_project` as a dependency
 - Focus: Verifying extractors produce correct output
-- 17 tests using YAML specifications for expected outputs
+- Uses YAML specifications for expected outputs (`test/fixtures/*.yaml`)
 - Tests Scout when used as a dependency (real-world usage)
+- Verifies schema structure, goal formatting, and parallel extraction
+- Files: `test_types.py` (types extractor), `test_tactics.py` (tactics extractor)
 
 The complete test suite ensures all components work correctly at every level: Lean schema validation, Python infrastructure, and end-to-end extraction.

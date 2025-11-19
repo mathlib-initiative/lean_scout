@@ -156,13 +156,18 @@ lake run scout --command extractors
 
 ### Data Extractor System
 
-**Core Type**: `DataExtractor` (defined in `LeanScout/Types.lean:70-73`)
+**Core Type**: `DataExtractor` (defined in `LeanScout/Types.lean`)
 ```lean
 structure DataExtractor where
   schema : Schema      -- Arrow schema defining output structure
   key : String         -- Field name used for computing shard ID
-  go : IO.FS.Handle → Target → IO Unit  -- Extraction function
+  go : (Json → IO Unit) → Target → IO Unit  -- Extraction function
 ```
+
+The `go` function takes:
+- A `sink` function (`Json → IO Unit`) for writing JSON records
+- A `Target` specifying what to extract from (`.imports` or `.input`)
+- Extracts data and writes JSON records by calling the sink
 
 **Registration**: Data extractors use the `@[data_extractor cmd]` attribute to register themselves. The attribute system is defined in `LeanScout/Init.lean:17-42` using a `PersistentEnvExtension` that maintains a `HashMap` of command names to extractor implementations.
 
@@ -306,15 +311,15 @@ The test suite uses a **three-phase architecture**:
 - Tests data extractors using `test_project` as a dependency
 - Focus: Verifying extractors produce correct output when Scout is used as a dependency
 - Files:
-  - `test_types.py`: Tests types extractor with `--imports` mode (6 tests)
-  - `test_tactics.py`: Tests tactics extractor with `--library` mode and parallel extraction (11 tests)
+  - `test_types.py`: Tests types extractor with `--imports` mode
+  - `test_tactics.py`: Tests tactics extractor with `--library` mode and parallel extraction
 - Uses YAML specifications (`test/fixtures/types.yaml`, `test/fixtures/tactics.yaml`) for expected outputs
 - Extracts data once per test session (module-scoped fixtures)
 - Three types of assertions:
-  - **Exact matches**: Full field equality for specific constants
-  - **Property checks**: Substring matching and nullability checks
-  - **Count checks**: Minimum records and required name existence
-- Total: 17 tests
+  - **Exact matches**: Full field equality for specific constants (e.g., verifying exact tactic strings)
+  - **Property checks**: Substring matching and nullability checks (e.g., tactics containing "rw")
+  - **Count checks**: Minimum records and required name/tactic existence
+- Tests verify schema structure, goal formatting, and parallel extraction correctness
 
 **Test Project** (`test_project/`)
 - Minimal Lean project with Scout as a dependency
@@ -322,18 +327,18 @@ The test suite uses a **three-phase architecture**:
 - Used to verify extractors work correctly in dependency mode
 
 **Helper Utilities** (`test/helpers.py`)
-- Shared extraction functions (`extract_from_dependency_types`, `extract_from_dependency_library`)
-- Dataset loading (`load_types_dataset`, `load_tactics_dataset`)
-- Query helpers (`get_record_by_name`, `get_records_by_tactic`)
-- Assertion helpers (`assert_record_exact_match`, `assert_tactic_contains`)
-- Shared `build_test_project` fixture used by all extractor tests
+- Shared extraction functions:
+  - `extract_from_dependency_types()`: Runs types extractor with `--imports` mode
+  - `extract_from_dependency_library()`: Runs any extractor with `--library` mode and parallel support
+- Shared `build_test_project` fixture: Builds test_project once per test session
+- Test files contain their own dataset loading and query helpers specific to each extractor
 
 **Integration Script** (`./run_tests`)
 - Runs all tests in three phases
 - Phase 0: Lean schema tests (`lake test`)
 - Phase 1: Infrastructure tests (34 tests)
-- Phase 2: Extractor tests (17 tests)
-- Total: 51 Python tests + Lean schema tests
+- Phase 2: Extractor tests
+- Provides comprehensive validation of the entire system
 
 ## Adding a New Data Extractor
 
@@ -347,14 +352,18 @@ The test suite uses a **three-phase architecture**:
        { name := "data", nullable := true, type := .string }
      ]
      key := "id"
-     go handle
+     go sink
      | .imports tgt => tgt.runCoreM <| Meta.MetaM.run' do
        -- Your extraction logic here
-       handle.putStrLn <| Json.compress <| json% { id : "...", data : "..." }
-     | _ => throw <| .userError "Unsupported Target"
+       sink <| json% { id : "...", data : "..." }
+     | .input tgt =>
+       -- For file-based extraction
+       throw <| .userError "Unsupported Target"
    ```
 3. Import in `LeanScout/DataExtractors.lean`
 4. Rebuild and run: `lake run scout --command mycommand --imports Lean`
+
+Note: The `go` function receives a `sink` function for writing JSON records. Call `sink` with JSON objects to output data.
 
 ## Python Dataset Creation
 
