@@ -80,10 +80,8 @@ class Orchestrator:
         # Wait for subprocess to complete
         returncode = process.wait()
         if returncode != 0:
-            stderr_output = process.stderr.read() if process.stderr else ""
             raise RuntimeError(
-                f"Lean subprocess failed with exit code {returncode}\n"
-                f"stderr: {stderr_output}"
+                f"Lean subprocess failed with exit code {returncode}"
             )
 
     def _run_single_file(self) -> None:
@@ -96,11 +94,9 @@ class Orchestrator:
 
         returncode = process.wait()
         if returncode != 0:
-            stderr_output = process.stderr.read() if process.stderr else ""
             raise RuntimeError(
                 f"Lean subprocess failed with exit code {returncode}\n"
-                f"File: {self.read_files[0]}\n"
-                f"stderr: {stderr_output}"
+                f"File: {self.read_files[0]}"
             )
 
     def _run_multiple_files(self) -> None:
@@ -166,12 +162,12 @@ class Orchestrator:
             args.extend(["--read", file_path])
 
         # stdout: piped for JSON output
-        # stderr: captured for error reporting
+        # stderr: inherit parent's stderr (no buffering issues)
         # stdin: closed (not needed)
         process = subprocess.Popen(
             args,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=None,  # Inherit parent's stderr
             stdin=subprocess.DEVNULL,
             text=True,
             bufsize=1,
@@ -197,11 +193,9 @@ class Orchestrator:
 
         returncode = process.wait()
         if returncode != 0:
-            stderr_output = process.stderr.read() if process.stderr else ""
             raise RuntimeError(
                 f"Lean subprocess failed with exit code {returncode}\n"
-                f"File: {file_path}\n"
-                f"stderr: {stderr_output}"
+                f"File: {file_path}"
             )
 
     def _process_subprocess_output(self, process: ProcessProtocol) -> None:

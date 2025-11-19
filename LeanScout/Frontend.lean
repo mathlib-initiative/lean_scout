@@ -11,40 +11,24 @@ open Lean Elab Frontend
 namespace InputTarget
 
 unsafe
-def runFrontend (tgt : InputTarget) (go : FrontendM α) : IO α := do
+def processCommands (tgt : InputTarget) (go : State → IO α) : IO α := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
   let (header, parserState, messages) ← Parser.parseHeader <| ← tgt.inputCtx
   let (env, messages) ← processHeader header tgt.opts messages <| ← tgt.inputCtx
   let commandState := { Command.mkState env messages tgt.opts with infoState.enabled := true }
-  go.run { inputCtx := ← tgt.inputCtx } |>.run' { commandState, parserState, cmdPos := parserState.pos }
+  let s ← IO.processCommands (← tgt.inputCtx) parserState commandState
+  go s
 
 unsafe
-def withFinalCommandState (tgt : InputTarget)
-    (go : Command.State → IO α) : IO α :=
-  tgt.runFrontend do processCommands ; go (← get).commandState
-
-unsafe
-def withFinalInfoState (tgt : InputTarget) (go : InfoState → IO α) : IO α :=
-  tgt.withFinalCommandState fun s => go s.infoState
-
-unsafe
-def withInfoTrees (tgt : InputTarget) (go : InfoTree → IO α) : IO (Array α) :=
-  tgt.runFrontend do
-    let mut done := false
-    let mut out := #[]
-    while !done do
-      done ← processCommand
-      if let some lastInfoTree := (← get).commandState.infoState.trees.toArray.back? then
-        let res ← go lastInfoTree
-        out := out.push res
-    return out
+def withInfoTrees (tgt : InputTarget) (go : InfoTree → IO α) : IO (PersistentArray α) :=
+  tgt.processCommands fun s => s.commandState.infoState.trees.mapM go
 
 unsafe
 def withVisitM (tgt : InputTarget)
     (preNode : ContextInfo → Info → PersistentArray InfoTree → IO Bool)
     (postNode : ContextInfo → Info → PersistentArray InfoTree → List (Option α) → IO α)
-    (ctx? : Option ContextInfo) : IO (Array (Option α)) := do
+    (ctx? : Option ContextInfo) : IO (PersistentArray (Option α)) := do
   tgt.withInfoTrees fun tree => tree.visitM preNode postNode ctx?
 
 end InputTarget
