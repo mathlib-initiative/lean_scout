@@ -44,7 +44,7 @@ initialize registerBuiltinAttribute {
 open Elab Term in
 elab "data_extractors" : term => do
   let extractors := dataExtractorsExt.getState (← getEnv)
-  let mut out ← Meta.mkAppOptM ``Std.HashMap.empty
+  let mut out ← Meta.mkAppOptM ``Std.HashMap.emptyWithCapacity
     #[some (.const ``Command []), some (.const ``DataExtractor []), none, none, some (toExpr 8)]
   for (cmd,extractor) in extractors do
     out ← Meta.mkAppOptM ``Std.HashMap.insert
