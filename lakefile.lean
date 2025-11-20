@@ -18,11 +18,6 @@ lean_exe lean_scout where
   root := `Main
   supportInterpreter := true
 
-lean_exe shake where
-  root := `Shake
-  supportInterpreter := true
-
-
 library_facet module_paths (lib) : Array System.FilePath := do
   let modules ← (← lib.modules.fetch).await
   let mut out := #[]
