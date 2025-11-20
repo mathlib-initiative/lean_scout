@@ -5,8 +5,8 @@ Lean Scout is a tool for creating datasets from Lean projects.
 ## Requirements
 
 To use this tool, you must have:
-- A basic Lean4 installation, including `elan`, `lake`, and `lean`. We currently support `leanprover/lean4:v4.25.0-rc2`.
-- The `uv` Python package manager.
+- A basic Lean4 installation, including `elan`, `lake`, and `lean`. We currently support `leanprover/lean4:v4.26.0-rc1`.
+- Python 3.13+ and the `uv` Python package manager.
 
 ## Basic usage
 
@@ -33,7 +33,7 @@ lake run scout --command tactics --library LeanScoutTest --parallel 8
 # Or use a file list
 echo "File1.lean" > file_list.txt
 echo "File2.lean" >> file_list.txt
-lake run scout --command tactics --read-list file_list.txt --parallel 8
+lake run scout --command tactics --readList file_list.txt --parallel 8
 ```
 
 If you have Lean Scout as a dependency with `Mathlib` as another dependency, you can similarly run:
@@ -66,9 +66,9 @@ Lean Scout supports multiple extraction modes:
    - Uses `lake query -q <library>:module_paths` to automatically discover all module files
    - Example: `lake run scout --command tactics --library LeanScoutTest --parallel 8`
 
-4. **`--read-list`**: Extract from files listed in a text file (parallel subprocesses)
+4. **`--readList`**: Extract from files listed in a text file (parallel subprocesses)
    - Best for: Custom file lists or integration with build systems
-   - Example: `lake run scout --command tactics --read-list my_files.txt --parallel 8`
+   - Example: `lake run scout --command tactics --readList my_files.txt --parallel 8`
 
 **Note**: The `--library` flag is the recommended approach for extracting data from entire libraries, as it automatically discovers all modules without requiring manual file management.
 
@@ -101,7 +101,7 @@ lake run scout --command types --imports Lean
 ### `tactics`
 Extracts tactic invocations with goal states, used constants, elaborator info, and syntax names.
 
-**Supported modes**: `--read`, `--read-list`, `--library`
+**Supported modes**: `--read`, `--readList`, `--library`
 
 **Example**:
 ```bash
