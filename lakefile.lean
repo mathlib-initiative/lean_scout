@@ -14,6 +14,7 @@ lean_lib LeanScoutTest
 @[default_target]
 lean_lib LeanScout
 
+@[default_target]
 lean_exe lean_scout where
   root := `Main
   supportInterpreter := true
