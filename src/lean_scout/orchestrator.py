@@ -1,6 +1,6 @@
 """Orchestrates Lean subprocess execution and coordinates data writing."""
+import logging
 import subprocess
-import sys
 from typing import Optional, List, Protocol, IO, Any
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -12,6 +12,9 @@ from .writer import ShardedParquetWriter
 class ProcessProtocol(Protocol):
     """Protocol for subprocess-like objects that can be used for extraction."""
     stdout: Optional[IO[Any]]
+
+
+logger = logging.getLogger(__name__)
 
 
 class Orchestrator:
@@ -61,19 +64,22 @@ class Orchestrator:
             Dictionary with statistics: total_rows, num_shards, etc.
         """
 
-        if self.imports: self._run_imports()
+        if self.imports:
+            self._run_imports()
 
         elif self.read_files:
             num_files = len(self.read_files)
 
-            if num_files == 1: self._run_single_file()
+            if num_files == 1:
+                self._run_single_file()
 
-            else: self._run_multiple_files()
+            else:
+                self._run_multiple_files()
 
         return self.writer.close()
 
     def _run_imports(self) -> None:
-        sys.stderr.write("Running single subprocess for imports target...\n")
+        logger.info("Running single subprocess for imports target...")
         process = self._spawn_lean_subprocess()
         self._process_subprocess_output(process)
 
@@ -88,7 +94,7 @@ class Orchestrator:
 
         assert self.read_files is not None and len(self.read_files) == 1, "Expected exactly one read file"
 
-        sys.stderr.write(f"Processing single file: {self.read_files[0]}\n")
+        logger.info("Processing single file: %s", self.read_files[0])
         process = self._spawn_lean_subprocess(self.read_files[0])
         self._process_subprocess_output(process)
 
@@ -106,9 +112,7 @@ class Orchestrator:
         num_files = len(self.read_files)
         max_workers = min(self.num_workers, num_files)
 
-        sys.stderr.write(
-            f"Processing {num_files} files in parallel with {max_workers} workers...\n"
-        )
+        logger.info("Processing %s files in parallel with %s workers...", num_files, max_workers)
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_file = {
@@ -124,12 +128,12 @@ class Orchestrator:
                 try:
                     future.result()
                     completed += 1
-                    sys.stderr.write(f"  [{completed + failed}/{num_files}] Completed: {file_path}\n")
+                    logger.info("[%s/%s] Completed: %s", completed + failed, num_files, file_path)
                 except Exception as exc:
                     failed += 1
                     error_msg = f"{file_path}: {exc}"
                     errors.append(error_msg)
-                    sys.stderr.write(f"  [{completed + failed}/{num_files}] Failed: {error_msg}\n")
+                    logger.error("[%s/%s] Failed: %s", completed + failed, num_files, error_msg)
 
             if errors:
                 raise RuntimeError(
