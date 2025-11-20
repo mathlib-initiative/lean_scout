@@ -233,7 +233,7 @@ Examples:
 
     # Convert paths
     root_path = Path(args.rootPath).resolve()
-    data_dir = Path(args.dataDir if args.dataDir is not None else args.rootPath).resolve()
+    data_dir = (root_path / args.dataDir).resolve() if args.dataDir is not None else root_path
 
     # Determine output path
     base_path = data_dir / args.command
