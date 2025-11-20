@@ -7,6 +7,16 @@ echo "╔═══════════════════════�
 echo "║     Lean Scout Test Suite (Three Phases)       ║"
 echo "╚════════════════════════════════════════════════╝"
 
+# Ensure test_project uses the same Lean toolchain as the repo root
+ROOT_TOOLCHAIN=$(cat lean-toolchain | tr -d '[:space:]')
+TEST_PROJECT_TOOLCHAIN=$(cat test_project/lean-toolchain | tr -d '[:space:]')
+
+if [ "$ROOT_TOOLCHAIN" != "$TEST_PROJECT_TOOLCHAIN" ]; then
+  echo "Error: test_project/lean-toolchain ($TEST_PROJECT_TOOLCHAIN) does not match root lean-toolchain ($ROOT_TOOLCHAIN)."
+  echo "Please update test_project/lean-toolchain to match the root toolchain."
+  exit 1
+fi
+
 echo ""
 echo "=== Phase 0: Lean Schema Tests ==="
 echo "Testing schema serialization/deserialization roundtrip"
