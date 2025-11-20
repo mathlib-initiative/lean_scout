@@ -4,11 +4,12 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 MANIFEST_PATH = ROOT / "lake-manifest.json"
-SUBPROJECT_DIR = ROOT / "data_extractor_subproject"
+SUBPROJECT_DIR = Path(tempfile.mkdtemp(prefix="lean_scout_subproject_"))
 
 with MANIFEST_PATH.open("r") as f:
     MANIFEST = json.load(f)
@@ -19,11 +20,11 @@ LAKEFILE = f"""
 name = "data"
 reservoir = false
 version = "0.1.0"
-packagesDir = "../.lake/packages"
+packagesDir = "{(ROOT / ".lake" / "packages").as_posix()}"
 
 [[require]]
 name = "{PKG_NAME}"
-path = "../"
+path = "{ROOT.as_posix()}"
 
 [[require]]
 name = "lean_scout"
@@ -38,9 +39,9 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python setup_subproject.py --command types --imports Lean
-  python setup_subproject.py --command tactics --read LeanScoutTest/TacticsTest.lean
-  python setup_subproject.py --command tactics --library LeanScoutTest --dataDir /tmp/out
+  python extract.py --command types --imports Lean
+  python extract.py --command tactics --read LeanScoutTest/TacticsTest.lean
+  python extract.py --command tactics --library LeanScoutTest --dataDir /tmp/out
         """,
     )
 
@@ -68,8 +69,8 @@ Examples:
 
     parser.add_argument(
         "--dataDir",
-        default=None,
-        help="Base output directory (default: subproject root).",
+        default=".",
+        help="Base output directory (default: root).",
     )
 
     args = parser.parse_args()
@@ -107,8 +108,8 @@ def run_in_subproject(cmd):
 def build_lake_command(args: argparse.Namespace) -> list[str]:
     cmd = ["lake", "run", "scout", "--command", args.command]
 
-    if args.dataDir is not None:
-        cmd.extend(["--dataDir", args.dataDir])
+    dataDir = Path(args.dataDir).resolve()
+    cmd.extend(["--dataDir", str(dataDir)])
 
     if args.imports:
         cmd.extend(["--imports", *args.imports])
