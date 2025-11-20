@@ -2,9 +2,13 @@ import json
 import os
 import hashlib
 import threading
+import logging
 from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+
+logger = logging.getLogger(__name__)
 
 
 class ShardedParquetWriter:
@@ -29,6 +33,7 @@ class ShardedParquetWriter:
         self.writers = {}   # shard -> pq.ParquetWriter (opened lazily)
         self.buffers = {}   # shard -> []
         self.counts = {}    # shard -> total rows written
+        self.paths = {}     # shard -> file path
 
         self._lock = threading.Lock()
 
@@ -69,10 +74,18 @@ class ShardedParquetWriter:
             path = os.path.join(self.out_dir, f"part-{shard:03d}.parquet")
             self.writers[shard] = pq.ParquetWriter(path, self.schema, compression=self.compression)
             self.counts[shard] = 0
+            self.paths[shard] = path
 
         table = pa.Table.from_pylist(records, schema=self.schema)
         self.writers[shard].write_table(table)
         self.counts[shard] += table.num_rows
+        logger.info(
+            "Wrote %s rows to shard %03d (%s total) at %s",
+            table.num_rows,
+            shard,
+            self.counts[shard],
+            self.paths[shard],
+        )
 
         records.clear()
 

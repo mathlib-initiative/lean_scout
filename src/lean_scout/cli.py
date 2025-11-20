@@ -4,12 +4,15 @@ import argparse
 import subprocess
 import json
 import os
+import logging
 from pathlib import Path
 from typing import List
 
 from .utils import deserialize_schema
 from .writer import ShardedParquetWriter
 from .orchestrator import Orchestrator
+
+logger = logging.getLogger(__name__)
 
 
 def read_file_list(file_list_path: str) -> List[str]:
@@ -108,6 +111,15 @@ def get_schema(command: str, root_path: Path) -> str:
     return schema_json
 
 
+def configure_logging(log_level: str) -> None:
+    """Configure root logging for the CLI."""
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+
 def main():
     """Main CLI entry point for lean-scout."""
     parser = argparse.ArgumentParser(
@@ -194,8 +206,16 @@ Examples:
              "Only applies to --read/--readList/--library with multiple files. "
              "Actual workers used: min(num_files, --parallel)"
     )
+    parser.add_argument(
+        "--logLevel",
+        default="INFO",
+        type=str.upper,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Logging level (default: INFO)",
+    )
 
     args = parser.parse_args()
+    configure_logging(args.logLevel)
 
     # Validate --parallel flag
     # Use number of CPU cores as maximum (default to 32 if can't determine)
@@ -207,9 +227,11 @@ Examples:
     if args.parallel < 1:
         parser.error(f"--parallel must be at least 1, got {args.parallel}")
     if args.parallel > MAX_WORKERS:
-        sys.stderr.write(
-            f"Warning: --parallel {args.parallel} exceeds number of CPU cores ({MAX_WORKERS}). "
-            f"Using {MAX_WORKERS} instead.\n"
+        logger.warning(
+            "--parallel %s exceeds number of CPU cores (%s). Using %s instead.",
+            args.parallel,
+            MAX_WORKERS,
+            MAX_WORKERS,
         )
         args.parallel = MAX_WORKERS
 
@@ -241,7 +263,7 @@ Examples:
 
     # Check if output directory already exists
     if base_path.exists():
-        sys.stderr.write(f"Error: Data directory {base_path} already exists. Aborting.\n")
+        logger.error("Data directory %s already exists. Aborting.", base_path)
         sys.exit(1)
 
     # Create output directory
@@ -253,16 +275,16 @@ Examples:
         if args.read:
             read_files = args.read
         elif args.readList:
-            sys.stderr.write(f"Reading file list from: {args.readList}\n")
+            logger.info("Reading file list from: %s", args.readList)
             read_files = read_file_list(args.readList)
-            sys.stderr.write(f"Found {len(read_files)} files to process\n")
+            logger.info("Found %s files to process", len(read_files))
         elif args.library:
-            sys.stderr.write(f"Querying module paths for library: {args.library}\n")
+            logger.info("Querying module paths for library: %s", args.library)
             read_files = query_library_paths(args.library, root_path)
-            sys.stderr.write(f"Found {len(read_files)} files to process\n")
+            logger.info("Found %s files to process", len(read_files))
 
         # Query schema from Lean
-        sys.stderr.write(f"Querying schema for command '{args.command}'...\n")
+        logger.info("Querying schema for command '%s'...", args.command)
         schema_json = get_schema(args.command, root_path)
         schema = deserialize_schema(schema_json)
 
@@ -292,15 +314,15 @@ Examples:
         )
 
         # Run extraction
-        sys.stderr.write(f"Running extraction for command '{args.command}'...\n")
+        logger.info("Running extraction for command '%s'...", args.command)
         stats = orchestrator.run()
 
         # Report results
-        sys.stderr.write(
-            f"\nExtraction complete!\n"
-            f"  Rows written: {stats['total_rows']}\n"
-            f"  Shards created: {stats['num_shards']}\n"
-            f"  Output directory: {stats['out_dir']}\n"
+        logger.info(
+            "Extraction complete! Rows written: %s | Shards created: %s | Output directory: %s",
+            stats["total_rows"],
+            stats["num_shards"],
+            stats["out_dir"],
         )
 
     except Exception as e:
@@ -308,7 +330,7 @@ Examples:
         if base_path.exists():
             import shutil
             shutil.rmtree(base_path)
-        sys.stderr.write(f"Error: {e}\n")
+        logger.exception("Extraction failed: %s", e)
         sys.exit(1)
 
 if __name__ == "__main__":
