@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+CALLER_ROOT = Path.cwd().resolve()
 MANIFEST_PATH = ROOT / "lake-manifest.json"
 SUBPROJECT_DIR = Path(tempfile.mkdtemp(prefix="lean_scout_subproject_"))
 LEAN_TOOLCHAIN_FILE = ROOT / "lean-toolchain"
@@ -67,7 +68,7 @@ def main():
     run_in_subproject(["lake", "build", "lean_scout"])
 
     # Pass through all user-provided CLI arguments so extract.py always matches lean-scout's interface.
-    lake_cmd = ["lake", "run", "scout", *sys.argv[1:]]
+    lake_cmd = ["lake", "run", "scout", "--dataRoot", str(CALLER_ROOT), *sys.argv[1:]]
     run_in_subproject(lake_cmd)
 
 

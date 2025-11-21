@@ -6,7 +6,7 @@ import json
 import os
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from .utils import deserialize_schema
 from .writer import ShardedParquetWriter
@@ -120,6 +120,40 @@ def configure_logging(log_level: str) -> None:
     )
 
 
+def resolve_directories(
+    root_path_arg: str,
+    data_dir_arg: Optional[str],
+    data_root_arg: Optional[str],
+    command: str,
+) -> tuple[Path, Path, Path, Path]:
+    """
+    Resolve filesystem paths for Lean execution and output locations.
+
+    Returns:
+        (root_path, data_root, data_dir, base_path)
+    """
+    root_path = Path(root_path_arg).expanduser().resolve()
+
+    # Choose base for data resolution (default: root_path)
+    data_root = Path(data_root_arg).expanduser() if data_root_arg is not None else root_path
+    if not data_root.is_absolute():
+        data_root = (root_path / data_root).resolve()
+    else:
+        data_root = data_root.resolve()
+
+    if data_dir_arg is None:
+        data_dir = data_root
+    else:
+        data_dir_candidate = Path(data_dir_arg).expanduser()
+        if data_dir_candidate.is_absolute():
+            data_dir = data_dir_candidate.resolve()
+        else:
+            data_dir = (data_root / data_dir_candidate).resolve()
+
+    base_path = (data_dir / command).resolve()
+    return root_path, data_root, data_dir, base_path
+
+
 def main():
     """Main CLI entry point for lean-scout."""
     parser = argparse.ArgumentParser(
@@ -179,7 +213,13 @@ Examples:
     parser.add_argument(
         "--dataDir",
         default=None,
-        help="Base output directory (default: rootPath)"
+        help="Base output directory (default: dataRoot)"
+    )
+    parser.add_argument(
+        "--dataRoot",
+        default=None,
+        help="Base directory for resolving --dataDir (default: --rootPath). "
+             "Useful when invoking from a different workspace than the Lean project."
     )
     parser.add_argument(
         "--numShards",
@@ -254,12 +294,12 @@ Examples:
         parser.error("one of the arguments --imports --read --readList --library is required (except for 'extractors' command)")
 
     # Convert paths
-    root_path = Path(args.rootPath).resolve()
-    data_dir = (root_path / args.dataDir).resolve() if args.dataDir is not None else root_path
-
-    # Determine output path
-    base_path = data_dir / args.command
-    base_path = base_path.resolve()
+    root_path, _, data_dir, base_path = resolve_directories(
+        root_path_arg=args.rootPath,
+        data_dir_arg=args.dataDir,
+        data_root_arg=args.dataRoot,
+        command=args.command,
+    )
 
     # Check if output directory already exists
     if base_path.exists():
