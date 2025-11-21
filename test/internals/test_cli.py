@@ -12,6 +12,7 @@ from pathlib import Path
 from lean_scout.cli import (
     read_file_list,
     query_library_paths,
+    resolve_directories,
 )
 
 
@@ -87,3 +88,58 @@ def test_read_file_list_whitespace_handling():
         assert files[2] == "File3.lean"
     finally:
         Path(temp_path).unlink()
+
+
+def test_resolve_directories_defaults_to_root(tmp_path):
+    root = (tmp_path / "project").resolve()
+    root.mkdir()
+
+    root_path, data_root, data_dir, base_path = resolve_directories(
+        root_path_arg=str(root),
+        data_dir_arg=None,
+        data_root_arg=None,
+        command="types",
+    )
+
+    assert root_path == root
+    assert data_root == root
+    assert data_dir == root
+    assert base_path == root / "types"
+
+
+def test_resolve_directories_prefers_data_root_for_outputs(tmp_path):
+    subproject = (tmp_path / "subproject").resolve()
+    caller_root = (tmp_path / "caller").resolve()
+    subproject.mkdir()
+    caller_root.mkdir()
+
+    _, data_root, data_dir, base_path = resolve_directories(
+        root_path_arg=str(subproject),
+        data_dir_arg="outputs",
+        data_root_arg=str(caller_root),
+        command="tactics",
+    )
+
+    assert data_root == caller_root
+    assert data_dir == caller_root / "outputs"
+    assert base_path == caller_root / "outputs" / "tactics"
+
+
+def test_resolve_directories_respects_absolute_data_dir(tmp_path):
+    subproject = (tmp_path / "subproject").resolve()
+    data_root = (tmp_path / "caller").resolve()
+    absolute_dir = (tmp_path / "absolute-out").resolve()
+    subproject.mkdir()
+    data_root.mkdir()
+    absolute_dir.mkdir()
+
+    _, resolved_data_root, data_dir, base_path = resolve_directories(
+        root_path_arg=str(subproject),
+        data_dir_arg=str(absolute_dir),
+        data_root_arg=str(data_root),
+        command="types",
+    )
+
+    assert resolved_data_root == data_root
+    assert data_dir == absolute_dir
+    assert base_path == absolute_dir / "types"
