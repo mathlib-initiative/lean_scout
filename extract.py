@@ -1,5 +1,4 @@
 #!/bin/env python
-import argparse
 import json
 import os
 import subprocess
@@ -10,6 +9,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 MANIFEST_PATH = ROOT / "lake-manifest.json"
 SUBPROJECT_DIR = Path(tempfile.mkdtemp(prefix="lean_scout_subproject_"))
+LEAN_TOOLCHAIN_FILE = ROOT / "lean-toolchain"
+
+try:
+    LEAN_TOOLCHAIN = LEAN_TOOLCHAIN_FILE.read_text().strip()
+except FileNotFoundError:
+    print(f"lean-toolchain not found at {LEAN_TOOLCHAIN_FILE}", file=sys.stderr)
+    sys.exit(1)
+
+LEAN_VERSION = LEAN_TOOLCHAIN.split(":")[-1] if LEAN_TOOLCHAIN else ""
+if not LEAN_VERSION:
+    print(f"lean-toolchain is empty at {LEAN_TOOLCHAIN_FILE}", file=sys.stderr)
+    sys.exit(1)
 
 with MANIFEST_PATH.open("r") as f:
     MANIFEST = json.load(f)
@@ -29,63 +40,8 @@ path = "{ROOT.as_posix()}"
 [[require]]
 name = "lean_scout"
 git = "git@github.com:mathlib-initiative/lean_scout.git"
-rev = "main"
+rev = "{LEAN_VERSION}"
 """
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Set up a subproject and run lean-scout within it.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python extract.py --command types --imports Lean
-  python extract.py --command tactics --read LeanScoutTest/TacticsTest.lean
-  python extract.py --command tactics --library LeanScoutTest --dataDir /tmp/out
-        """,
-    )
-
-    parser.add_argument(
-        "--command",
-        required=True,
-        help="Extractor command to run (e.g., types, tactics). Use 'extractors' to list available commands.",
-    )
-
-    target_group = parser.add_mutually_exclusive_group(required=False)
-    target_group.add_argument(
-        "--imports",
-        nargs="+",
-        help="Modules to import (e.g., Lean, Mathlib).",
-    )
-    target_group.add_argument(
-        "--read",
-        nargs="+",
-        help="Lean file(s) to read and process. Multiple files will be processed in parallel.",
-    )
-    target_group.add_argument(
-        "--library",
-        help="Library name to extract from (e.g., LeanScoutTest, Mathlib). Queries module paths using lake query -q <library>:module_paths.",
-    )
-
-    parser.add_argument(
-        "--dataDir",
-        default=".",
-        help="Base output directory (default: root).",
-    )
-
-    args = parser.parse_args()
-
-    if (
-        args.command != "extractors"
-        and not args.imports
-        and not args.read
-        and not args.library
-    ):
-        parser.error(
-            "one of the arguments --imports --read --library is required (except for 'extractors' command)"
-        )
-
-    return args
 
 
 def ensure_subproject():
@@ -105,28 +61,13 @@ def run_in_subproject(cmd):
         sys.exit(result.returncode)
 
 
-def build_lake_command(args: argparse.Namespace) -> list[str]:
-    cmd = ["lake", "run", "scout", "--command", args.command]
-
-    dataDir = Path(args.dataDir).resolve()
-    cmd.extend(["--dataDir", str(dataDir)])
-
-    if args.imports:
-        cmd.extend(["--imports", *args.imports])
-    elif args.read:
-        cmd.extend(["--read", *args.read])
-    elif args.library:
-        cmd.extend(["--library", args.library])
-
-    return cmd
-
-
 def main():
-    args = parse_args()
     ensure_subproject()
 
     run_in_subproject(["lake", "build", "lean_scout"])
-    lake_cmd = build_lake_command(args)
+
+    # Pass through all user-provided CLI arguments so extract.py always matches lean-scout's interface.
+    lake_cmd = ["lake", "run", "scout", *sys.argv[1:]]
     run_in_subproject(lake_cmd)
 
 
