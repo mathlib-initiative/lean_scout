@@ -44,7 +44,7 @@ class JsonLinesWriter(Writer):
         with self._lock:
             return {"total_rows": self.count}
 
-class ShardedParquetWriter:
+class ShardedParquetWriter(Writer):
     """Manages sharded parquet file writing with batching."""
 
     def __init__(

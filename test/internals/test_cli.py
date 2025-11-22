@@ -90,20 +90,27 @@ def test_read_file_list_whitespace_handling():
         Path(temp_path).unlink()
 
 
+def test_read_file_list_resolves_base_path(tmp_path):
+    file_list = tmp_path / "relative_list.txt"
+    file_list.write_text("File1.lean\nFile2.lean\n")
+
+    files = read_file_list("relative_list.txt", base_path=tmp_path)
+    assert files == ["File1.lean", "File2.lean"]
+
+
 def test_resolve_directories_defaults_to_root(tmp_path):
     root = (tmp_path / "project").resolve()
     root.mkdir()
 
-    root_path, data_root, data_dir, base_path = resolve_directories(
+    root_path, cmd_root, base_path = resolve_directories(
         root_path_arg=str(root),
         data_dir_arg=None,
-        data_root_arg=None,
+        cmd_root_arg=str(root),
         command="types",
     )
 
     assert root_path == root
-    assert data_root == root
-    assert data_dir == root
+    assert cmd_root == root
     assert base_path == root / "types"
 
 
@@ -113,15 +120,14 @@ def test_resolve_directories_prefers_data_root_for_outputs(tmp_path):
     subproject.mkdir()
     caller_root.mkdir()
 
-    _, data_root, data_dir, base_path = resolve_directories(
+    _, cmd_root, base_path = resolve_directories(
         root_path_arg=str(subproject),
         data_dir_arg="outputs",
-        data_root_arg=str(caller_root),
+        cmd_root_arg=str(caller_root),
         command="tactics",
     )
 
-    assert data_root == caller_root
-    assert data_dir == caller_root / "outputs"
+    assert cmd_root == caller_root
     assert base_path == caller_root / "outputs" / "tactics"
 
 
@@ -133,13 +139,12 @@ def test_resolve_directories_respects_absolute_data_dir(tmp_path):
     data_root.mkdir()
     absolute_dir.mkdir()
 
-    _, resolved_data_root, data_dir, base_path = resolve_directories(
+    _, resolved_cmd_root, base_path = resolve_directories(
         root_path_arg=str(subproject),
         data_dir_arg=str(absolute_dir),
-        data_root_arg=str(data_root),
+        cmd_root_arg=str(data_root),
         command="types",
     )
 
-    assert resolved_data_root == data_root
-    assert data_dir == absolute_dir
+    assert resolved_cmd_root == data_root
     assert base_path == absolute_dir / "types"

@@ -49,6 +49,8 @@ lake run scout --command types --dataDir $HOME/storage --imports Mathlib
 
 This will write the data to files located within the `$HOME/storage/types` directory.
 
+By default Lean Scout resolves both outputs and relative read targets from the directory where you invoke the command (`--cmdRoot`, default: current working directory). If you run via a wrapper script or from outside the Lean project root, pass `--cmdRoot /path/to/where/paths/are/relative` so relative `--read`/`--readList` paths and outputs stay anchored to that location.
+
 ## Extraction Modes
 
 Lean Scout supports multiple extraction modes:

@@ -15,12 +15,13 @@ from .orchestrator import Orchestrator
 logger = logging.getLogger(__name__)
 
 
-def read_file_list(file_list_path: str) -> List[str]:
+def read_file_list(file_list_path: str, base_path: Optional[Path] = None) -> List[str]:
     """
     Read a list of file paths from a file (one per line).
 
     Args:
         file_list_path: Path to file containing file paths
+        base_path: Optional base directory for resolving relative file_list_path
 
     Returns:
         List of file paths (stripped of whitespace, empty lines ignored)
@@ -30,6 +31,8 @@ def read_file_list(file_list_path: str) -> List[str]:
         RuntimeError: If file is empty
     """
     path = Path(file_list_path)
+    if base_path is not None and not path.is_absolute():
+        path = (base_path / path).resolve()
     if not path.exists():
         raise FileNotFoundError(f"File list not found: {file_list_path}")
 
@@ -123,35 +126,32 @@ def configure_logging(log_level: str) -> None:
 def resolve_directories(
     root_path_arg: str,
     data_dir_arg: Optional[str],
-    data_root_arg: Optional[str],
+    cmd_root_arg: Optional[str],
     command: str,
-) -> tuple[Path, Path, Path, Path]:
+) -> tuple[Path, Path, Path]:
     """
     Resolve filesystem paths for Lean execution and output locations.
 
     Returns:
-        (root_path, data_root, data_dir, base_path)
+        (root_path, cmd_root, base_path)
     """
     root_path = Path(root_path_arg).expanduser().resolve()
 
-    # Choose base for data resolution (default: root_path)
-    data_root = Path(data_root_arg).expanduser() if data_root_arg is not None else root_path
-    if not data_root.is_absolute():
-        data_root = (root_path / data_root).resolve()
-    else:
-        data_root = data_root.resolve()
+    # Base directory representing the original command invocation
+    cmd_root = Path(cmd_root_arg).expanduser() if cmd_root_arg is not None else Path.cwd()
+    cmd_root = cmd_root.resolve()
 
     if data_dir_arg is None:
-        data_dir = data_root
+        data_dir = cmd_root
     else:
         data_dir_candidate = Path(data_dir_arg).expanduser()
         if data_dir_candidate.is_absolute():
             data_dir = data_dir_candidate.resolve()
         else:
-            data_dir = (data_root / data_dir_candidate).resolve()
+            data_dir = (cmd_root / data_dir_candidate).resolve()
 
     base_path = (data_dir / command).resolve()
-    return root_path, data_root, data_dir, base_path
+    return root_path, cmd_root, base_path
 
 
 def main():
@@ -213,13 +213,14 @@ Examples:
     parser.add_argument(
         "--dataDir",
         default=None,
-        help="Base output directory (default: dataRoot)"
+        help="Base output directory (default: cmdRoot)"
     )
     parser.add_argument(
-        "--dataRoot",
+        "--cmdRoot",
+        dest="cmdRoot",
         default=None,
-        help="Base directory for resolving --dataDir (default: --rootPath). "
-             "Useful when invoking from a different workspace than the Lean project."
+        help="Root directory where the command was invoked. Used to resolve relative inputs and outputs "
+             "(default: current working directory)."
     )
     parser.add_argument(
         "--numShards",
@@ -298,18 +299,17 @@ Examples:
     if not args.imports and not args.read and not args.readList and not args.library:
         parser.error("one of the arguments --imports --read --readList --library is required (except for 'extractors' command)")
 
-    # Convert paths (only needed for parquet output)
-    root_path = Path(args.rootPath).expanduser().resolve()
-    base_path = None
+    # Resolve key directories (command root influences both input and output resolution)
+    root_path, cmd_root, base_path = resolve_directories(
+        root_path_arg=args.rootPath,
+        data_dir_arg=args.dataDir,
+        cmd_root_arg=args.cmdRoot,
+        command=args.command,
+    )
 
-    if not args.jsonl:
-        root_path, _, data_dir, base_path = resolve_directories(
-            root_path_arg=args.rootPath,
-            data_dir_arg=args.dataDir,
-            data_root_arg=args.dataRoot,
-            command=args.command,
-        )
-
+    if args.jsonl:
+        base_path = None
+    else:
         # Check if output directory already exists
         if base_path.exists():
             logger.error("Data directory %s already exists. Aborting.", base_path)
@@ -325,22 +325,22 @@ Examples:
             read_files = args.read
         elif args.readList:
             logger.info("Reading file list from: %s", args.readList)
-            read_files = read_file_list(args.readList)
+            read_files = read_file_list(args.readList, base_path=cmd_root)
             logger.info("Found %s files to process", len(read_files))
         elif args.library:
             logger.info("Querying module paths for library: %s", args.library)
             read_files = query_library_paths(args.library, root_path)
             logger.info("Found %s files to process", len(read_files))
 
-        # Query schema from Lean
-        logger.info("Querying schema for command '%s'...", args.command)
-        schema_json = get_schema(args.command, root_path)
-        schema = deserialize_schema(schema_json)
-
         # Create writer
         if args.jsonl:
             writer = JsonLinesWriter()
         else:
+            # Parquet path: fetch schema (for shard key and Arrow schema)
+            logger.info("Querying schema for command '%s'...", args.command)
+            schema_json = get_schema(args.command, root_path)
+            schema = deserialize_schema(schema_json)
+
             # Extract shard key from schema metadata
             schema_obj = json.loads(schema_json)
             if "key" not in schema_obj:
@@ -359,6 +359,7 @@ Examples:
         orchestrator = Orchestrator(
             command=args.command,
             root_path=root_path,
+            cmd_root=cmd_root,
             writer=writer,
             imports=args.imports,
             read_files=read_files,
