@@ -1,6 +1,8 @@
 """Tests for tactics data extractor using test_project."""
 import pytest
 import yaml
+import json
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, cast
@@ -200,4 +202,68 @@ def test_tactics_rfl_from_test_project(tactics_dataset):
     for record in rfl_records:
         assert len(record['goals']) > 0, "rfl should have at least one goal"
 
+
+# ============================================================================
+# JSON Lines Output Tests
+# ============================================================================
+
+def extract_tactics_jsonl(library: str, working_dir: Path) -> list[dict[str, Any]]:
+    """Extract tactics using --jsonl flag and return parsed records."""
+    result = subprocess.run(
+        ["lake", "run", "scout", "--command", "tactics", "--library", library,
+         "--parallel", "1", "--jsonl"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=str(working_dir)
+    )
+
+    records = []
+    for line in result.stdout.strip().split("\n"):
+        if line:
+            records.append(json.loads(line))
+
+    return records
+
+
+@pytest.fixture(scope="module")
+def tactics_jsonl_records():
+    """Extract tactics as JSON Lines from test_project."""
+    return extract_tactics_jsonl("LeanScoutTestProject", TEST_PROJECT_DIR)
+
+
+def test_tactics_jsonl_output_format(tactics_jsonl_records):
+    """Verify tactics JSON Lines output has valid structure."""
+    assert len(tactics_jsonl_records) > 0, "Should have extracted some tactic records"
+
+    for record in tactics_jsonl_records:
+        assert "ppTac" in record, "Tactic record should have 'ppTac' field"
+        assert "goals" in record, "Tactic record should have 'goals' field"
+
+
+def test_tactics_jsonl_has_expected_tactics(tactics_jsonl_records):
+    """Verify expected tactics are present in JSON Lines output."""
+    tactics = {r["ppTac"] for r in tactics_jsonl_records}
+
+    assert "rfl" in tactics or any("rfl" in t for t in tactics), \
+        "Should have 'rfl' tactic in output"
+
+
+def test_tactics_jsonl_no_output_directory_created():
+    """Verify --jsonl flag does not create output directories."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        data_dir = Path(tmpdir)
+
+        subprocess.run(
+            ["lake", "run", "scout", "--command", "tactics", "--library",
+             "LeanScoutTestProject", "--parallel", "1", "--jsonl",
+             "--dataDir", str(data_dir)],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=str(TEST_PROJECT_DIR)
+        )
+
+        tactics_dir = data_dir / "tactics"
+        assert not tactics_dir.exists(), "--jsonl should not create output directory"
 

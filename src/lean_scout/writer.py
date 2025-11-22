@@ -4,7 +4,7 @@ import sys
 import hashlib
 import threading
 import logging
-from typing import Any
+from typing import Any, TextIO
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -24,18 +24,19 @@ class Writer:
         raise NotImplementedError()
 
 class JsonLinesWriter(Writer):
-    """Writes records as JSON Lines to stdout."""
+    """Writes records as JSON Lines to a stream (default: stdout)."""
 
-    def __init__(self):
+    def __init__(self, stream: TextIO | None = None):
+        self.stream = stream if stream is not None else sys.stdout
         self.count = 0
         self._lock = threading.Lock()
 
     def add_record(self, record: dict) -> None:
-        """Add a record to stdout."""
+        """Add a record to the output stream."""
         line = json.dumps(record, ensure_ascii=False)
         with self._lock:
-            sys.stdout.write(line + "\n")
-            sys.stdout.flush()
+            self.stream.write(line + "\n")
+            self.stream.flush()
             self.count += 1
 
     def close(self) -> dict:
