@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from .utils import deserialize_schema
-from .writer import ShardedParquetWriter
+from .writer import JsonLinesWriter, ShardedParquetWriter
 from .orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
@@ -253,6 +253,11 @@ Examples:
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Logging level (default: INFO)",
     )
+    parser.add_argument(
+        "--jsonl",
+        action="store_true",
+        help="Output JSON Lines to stdout instead of sharded Parquet files",
+    )
 
     args = parser.parse_args()
     configure_logging(args.logLevel)
@@ -293,21 +298,25 @@ Examples:
     if not args.imports and not args.read and not args.readList and not args.library:
         parser.error("one of the arguments --imports --read --readList --library is required (except for 'extractors' command)")
 
-    # Convert paths
-    root_path, _, data_dir, base_path = resolve_directories(
-        root_path_arg=args.rootPath,
-        data_dir_arg=args.dataDir,
-        data_root_arg=args.dataRoot,
-        command=args.command,
-    )
+    # Convert paths (only needed for parquet output)
+    root_path = Path(args.rootPath).expanduser().resolve()
+    base_path = None
 
-    # Check if output directory already exists
-    if base_path.exists():
-        logger.error("Data directory %s already exists. Aborting.", base_path)
-        sys.exit(1)
+    if not args.jsonl:
+        root_path, _, data_dir, base_path = resolve_directories(
+            root_path_arg=args.rootPath,
+            data_dir_arg=args.dataDir,
+            data_root_arg=args.dataRoot,
+            command=args.command,
+        )
 
-    # Create output directory
-    base_path.mkdir(parents=True, exist_ok=False)
+        # Check if output directory already exists
+        if base_path.exists():
+            logger.error("Data directory %s already exists. Aborting.", base_path)
+            sys.exit(1)
+
+        # Create output directory
+        base_path.mkdir(parents=True, exist_ok=False)
 
     try:
         # Determine read files list
@@ -328,20 +337,23 @@ Examples:
         schema_json = get_schema(args.command, root_path)
         schema = deserialize_schema(schema_json)
 
-        # Extract shard key from schema metadata
-        schema_obj = json.loads(schema_json)
-        if "key" not in schema_obj:
-            raise ValueError(f"Schema for command '{args.command}' missing required 'key' field")
-        key = schema_obj["key"]
-
         # Create writer
-        writer = ShardedParquetWriter(
-            schema=schema,
-            out_dir=str(base_path),
-            num_shards=args.numShards,
-            batch_rows=args.batchRows,
-            shard_key=key,
-        )
+        if args.jsonl:
+            writer = JsonLinesWriter()
+        else:
+            # Extract shard key from schema metadata
+            schema_obj = json.loads(schema_json)
+            if "key" not in schema_obj:
+                raise ValueError(f"Schema for command '{args.command}' missing required 'key' field")
+            key = schema_obj["key"]
+
+            writer = ShardedParquetWriter(
+                schema=schema,
+                out_dir=str(base_path),
+                num_shards=args.numShards,
+                batch_rows=args.batchRows,
+                shard_key=key,
+            )
 
         # Create orchestrator
         orchestrator = Orchestrator(
@@ -358,16 +370,19 @@ Examples:
         stats = orchestrator.run()
 
         # Report results
-        logger.info(
-            "Extraction complete! Rows written: %s | Shards created: %s | Output directory: %s",
-            stats["total_rows"],
-            stats["num_shards"],
-            stats["out_dir"],
-        )
+        if args.jsonl:
+            logger.info("Extraction complete! Rows written: %s", stats["total_rows"])
+        else:
+            logger.info(
+                "Extraction complete! Rows written: %s | Shards created: %s | Output directory: %s",
+                stats["total_rows"],
+                stats["num_shards"],
+                stats["out_dir"],
+            )
 
     except Exception as e:
-        # Clean up output directory on error
-        if base_path.exists():
+        # Clean up output directory on error (only for parquet)
+        if base_path is not None and base_path.exists():
             import shutil
             shutil.rmtree(base_path)
         logger.exception("Extraction failed: %s", e)

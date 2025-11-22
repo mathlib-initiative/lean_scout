@@ -6,7 +6,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .utils import stream_json_lines
-from .writer import ShardedParquetWriter
+from .writer import Writer
 
 
 class ProcessProtocol(Protocol):
@@ -24,7 +24,7 @@ class Orchestrator:
         self,
         command: str,
         root_path: Path,
-        writer: ShardedParquetWriter,
+        writer: Writer,
         imports: Optional[List[str]] = None,
         read_files: Optional[List[str]] = None,
         num_workers: int = 1,
