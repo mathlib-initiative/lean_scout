@@ -4,7 +4,7 @@
 - Lean source lives under `LeanScout/` (core library) and `LeanScoutTest/` (fixtures); entrypoint binary is `Main.lean`.
 - Python orchestration code is in `src/lean_scout/` (`cli.py`, `orchestrator.py`, `writer.py`, `utils.py`); packaged via `pyproject.toml`.
 - Tests are split by layer: Lean schema checks via `lake test`; Python/unit coverage in `test/internals/`; end-to-end extractor tests plus fixtures in `test/extractors/` and `test/fixtures/`. Sample Lean project for integration lives in `test_project/`.
-- Generated parquet outputs and temporary shards should stay out of version control; configure outputs with `--dataDir` when running commands.
+- Generated parquet outputs and temporary shards should stay out of version control; configure outputs with `--dataDir` when running commands and use `--cmdRoot` to anchor relative inputs/outputs to the invocation directory when calling from wrappers.
 
 ## Build, Test, and Development Commands
 Run everything from the repo root (requires `elan`/`lake`, Lean `v4.26.0-rc1`, and `uv`):
@@ -22,7 +22,7 @@ lake run scout --command types --imports Lean  # Example extractor invocation
 - Lean: follow standard Lean4 style (two-space indents, modules mirroring paths). Use `UpperCamelCase` for types, `lowerCamelCase` for terms of types, `snake_case` for proofs. 
 - Use descriptive tactic names, and keep tactic blocks readable over dense nesting.
 - Python: PEP 8 with type hints and docstrings for public functions; `snake_case` for functions/vars, `PascalCase` for classes. Prefer explicit paths (`Path` over strings) and small, testable helpers.
-- Keep command-line flags consistent with existing CLI (`--imports`, `--library`, `--readList`); reuse shared utilities rather than re-spawning processes ad hoc.
+- Keep command-line flags consistent with existing CLI (`--imports`, `--library`, `--readList`, `--cmdRoot`); reuse shared utilities rather than re-spawning processes ad hoc.
 
 ## Testing Guidelines
 - Add or update Lean-facing schemas when introducing new extractors; surface schemas through `Lake` to keep `lake test` passing.
@@ -58,6 +58,7 @@ Lean Scout creates datasets from Lean4 projects by extracting structured data (t
   - `lake run scout --command tactics --read File1.lean File2.lean --parallel 4`
   - `lake run scout --command tactics --library LeanScoutTest --parallel 8`
   - File list helper: `lake build LeanScout:module_paths` then `--readList module_paths`
+  - If invoking from outside the project root or through scripts, pass `--cmdRoot <invocation_dir>` so relative reads and outputs resolve to that directory.
 
 ## Testing
 - All phases: `./run_tests`
@@ -72,7 +73,7 @@ Three-phase suite: Lean schema roundtrips, Python infra (writer/orchestrator/CLI
 - Targets: `.imports` (single subprocess) vs `.input` (per-file subprocess; used by `--read`, `--readList`, `--library`).
 - Writer: `ShardedParquetWriter` hashes the key field (BLAKE2b) to shards; thread-safe for concurrent writers.
 - Lake config: `scout` lake script wraps `uv run lean-scout` with `--scoutPath`; `module_paths` facet exposes library file lists via `lake query -q <lib>:module_paths`.
-- Convenience script: `extract.py` creates a temporary subproject, builds `lean_scout`, then runs `lake run scout`. Pass `--dataDir` to place outputs somewhere persistent; the default temp directory is ephemeral.
+- Convenience script: `extract.py` creates a temporary subproject, builds `lean_scout`, then runs `lake run scout`. Pass `--cmdRoot` to pin path resolution to the caller, and `--dataDir` to place outputs somewhere persistent; the default temp directory is ephemeral.
 - CLI flags: `--readList` is camel-cased in the Python CLI; keep flag names consistent across docs and scripts.
 
 ## Adding Extractors

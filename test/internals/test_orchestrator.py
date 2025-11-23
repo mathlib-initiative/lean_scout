@@ -60,30 +60,38 @@ def root_path():
     return Path.cwd()
 
 
-def test_orchestrator_init_validation_both_targets(writer, root_path):
+@pytest.fixture
+def cmd_root():
+    return Path.cwd()
+
+
+def test_orchestrator_init_validation_both_targets(writer, root_path, cmd_root):
     with pytest.raises(ValueError, match="Cannot specify both"):
         Orchestrator(
             command="types",
             root_path=root_path,
+            cmd_root=cmd_root,
             writer=writer,
             imports=["Lean"],
             read_files=["File.lean"],
         )
 
 
-def test_orchestrator_init_validation_no_targets(writer, root_path):
+def test_orchestrator_init_validation_no_targets(writer, root_path, cmd_root):
     with pytest.raises(ValueError, match="Must specify either"):
         Orchestrator(
             command="types",
             root_path=root_path,
+            cmd_root=cmd_root,
             writer=writer,
         )
 
 
-def test_orchestrator_init_valid_imports(writer, root_path):
+def test_orchestrator_init_valid_imports(writer, root_path, cmd_root):
     orch = Orchestrator(
         command="types",
         root_path=root_path,
+        cmd_root=cmd_root,
         writer=writer,
         imports=["Lean", "Init"],
     )
@@ -93,25 +101,30 @@ def test_orchestrator_init_valid_imports(writer, root_path):
     assert orch.read_files is None
 
 
-def test_orchestrator_init_valid_read(writer, root_path):
+def test_orchestrator_init_valid_read(writer, root_path, cmd_root):
     orch = Orchestrator(
         command="tactics",
         root_path=root_path,
+        cmd_root=cmd_root,
         writer=writer,
         read_files=["File1.lean", "File2.lean"],
         num_workers=4,
     )
 
     assert orch.command == "tactics"
-    assert orch.read_files == ["File1.lean", "File2.lean"]
+    assert orch.read_files == [
+        str(cmd_root.resolve() / "File1.lean"),
+        str(cmd_root.resolve() / "File2.lean"),
+    ]
     assert orch.imports is None
     assert orch.num_workers == 4
 
 
-def test_orchestrator_process_output_valid_json(writer, root_path):
+def test_orchestrator_process_output_valid_json(writer, root_path, cmd_root):
     orch = Orchestrator(
         command="types",
         root_path=root_path,
+        cmd_root=cmd_root,
         writer=writer,
         imports=["Lean"],
     )
@@ -125,10 +138,11 @@ def test_orchestrator_process_output_valid_json(writer, root_path):
     assert stats["total_rows"] == 2
 
 
-def test_orchestrator_process_output_empty(writer, root_path):
+def test_orchestrator_process_output_empty(writer, root_path, cmd_root):
     orch = Orchestrator(
         command="types",
         root_path=root_path,
+        cmd_root=cmd_root,
         writer=writer,
         imports=["Lean"],
     )
@@ -142,10 +156,11 @@ def test_orchestrator_process_output_empty(writer, root_path):
     assert stats["total_rows"] == 0
 
 
-def test_orchestrator_process_output_no_stdout(writer, root_path):
+def test_orchestrator_process_output_no_stdout(writer, root_path, cmd_root):
     orch = Orchestrator(
         command="types",
         root_path=root_path,
+        cmd_root=cmd_root,
         writer=writer,
         imports=["Lean"],
     )

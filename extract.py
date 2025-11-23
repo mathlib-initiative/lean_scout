@@ -65,10 +65,10 @@ def run_in_subproject(cmd):
 def main():
     ensure_subproject()
 
-    run_in_subproject(["lake", "build", "lean_scout"])
+    run_in_subproject(["lake", "build", "-q", "lean_scout"])
 
     # Pass through all user-provided CLI arguments so extract.py always matches lean-scout's interface.
-    lake_cmd = ["lake", "run", "scout", "--dataRoot", str(CALLER_ROOT), *sys.argv[1:]]
+    lake_cmd = ["lake", "run", "scout", "--cmdRoot", str(CALLER_ROOT), *sys.argv[1:]]
     run_in_subproject(lake_cmd)
 
 

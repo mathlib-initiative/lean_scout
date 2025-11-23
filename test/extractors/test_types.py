@@ -1,6 +1,7 @@
 """Tests for types data extractor using test_project."""
 import pytest
 import yaml
+import json
 import tempfile
 import subprocess
 from pathlib import Path
@@ -142,4 +143,98 @@ def test_types_imports_modules(types_dataset_imports):
         f"Expected modules {expected_modules} to be in dataset modules"
     )
 
+
+# ============================================================================
+# JSON Lines Output Tests
+# ============================================================================
+
+def extract_types_jsonl(library: str, working_dir: Path) -> list[dict[str, Any]]:
+    """Extract types using --jsonl flag and return parsed records."""
+    result = subprocess.run(
+        ["lake", "run", "scout", "--command", "types", "--imports", library, "--jsonl"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=str(working_dir)
+    )
+
+    records = []
+    for line in result.stdout.strip().split("\n"):
+        if line:
+            records.append(json.loads(line))
+
+    return records
+
+
+@pytest.fixture(scope="module")
+def types_jsonl_records():
+    """Extract types as JSON Lines from test_project."""
+    return extract_types_jsonl("LeanScoutTestProject", TEST_PROJECT_DIR)
+
+
+def test_types_jsonl_output_format(types_jsonl_records):
+    """Verify JSON Lines output has valid structure."""
+    assert len(types_jsonl_records) > 0, "Should have extracted some records"
+
+    for record in types_jsonl_records:
+        assert "name" in record, "Record should have 'name' field"
+        assert "type" in record, "Record should have 'type' field"
+        assert isinstance(record["name"], str)
+        assert isinstance(record["type"], str)
+
+
+def test_types_jsonl_has_expected_records(types_jsonl_records):
+    """Verify expected types are present in JSON Lines output."""
+    names = {r["name"] for r in types_jsonl_records}
+
+    expected_names = {"add_zero", "zero_add", "add_comm"}
+    missing = expected_names - names
+    assert len(missing) == 0, f"Missing expected types: {missing}"
+
+
+def test_types_jsonl_record_content(types_jsonl_records):
+    """Verify specific record content matches expected values."""
+    add_zero = next((r for r in types_jsonl_records if r["name"] == "add_zero"), None)
+    assert add_zero is not None, "Should find add_zero record"
+
+    assert add_zero["module"] == "LeanScoutTestProject.Basic"
+    assert "Nat" in add_zero["type"]
+
+
+def test_types_jsonl_no_output_directory_created():
+    """Verify --jsonl flag does not create output directories."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        data_dir = Path(tmpdir)
+
+        subprocess.run(
+            ["lake", "run", "scout", "--command", "types", "--imports",
+             "LeanScoutTestProject", "--jsonl", "--dataDir", str(data_dir)],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=str(TEST_PROJECT_DIR)
+        )
+
+        types_dir = data_dir / "types"
+        assert not types_dir.exists(), "--jsonl should not create output directory"
+
+
+def test_types_jsonl_logs_to_stderr():
+    """Verify logs go to stderr, not stdout."""
+    result = subprocess.run(
+        ["lake", "run", "scout", "--command", "types", "--imports",
+         "LeanScoutTestProject", "--jsonl"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=str(TEST_PROJECT_DIR)
+    )
+
+    # stdout should only contain valid JSON lines
+    for line in result.stdout.strip().split("\n"):
+        if line:
+            json.loads(line)
+
+    assert "Querying schema" in result.stderr or "Extraction complete" in result.stderr, \
+        "Log messages should appear in stderr"
 

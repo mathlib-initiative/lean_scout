@@ -1,9 +1,10 @@
 import json
 import os
+import sys
 import hashlib
 import threading
 import logging
-from typing import Any
+from typing import Any, TextIO
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -11,7 +12,39 @@ import pyarrow.parquet as pq
 logger = logging.getLogger(__name__)
 
 
-class ShardedParquetWriter:
+class Writer:
+    """Abstract base class for data writers."""
+
+    def add_record(self, record: dict) -> None:  # noqa: ARG002
+        """Add a record to the writer."""
+        raise NotImplementedError()
+
+    def close(self) -> dict:
+        """Close the writer and return statistics."""
+        raise NotImplementedError()
+
+class JsonLinesWriter(Writer):
+    """Writes records as JSON Lines to a stream (default: stdout)."""
+
+    def __init__(self, stream: TextIO | None = None):
+        self.stream = stream if stream is not None else sys.stdout
+        self.count = 0
+        self._lock = threading.Lock()
+
+    def add_record(self, record: dict) -> None:
+        """Add a record to the output stream."""
+        line = json.dumps(record, ensure_ascii=False)
+        with self._lock:
+            self.stream.write(line + "\n")
+            self.stream.flush()
+            self.count += 1
+
+    def close(self) -> dict:
+        """Close the writer and return statistics."""
+        with self._lock:
+            return {"total_rows": self.count}
+
+class ShardedParquetWriter(Writer):
     """Manages sharded parquet file writing with batching."""
 
     def __init__(

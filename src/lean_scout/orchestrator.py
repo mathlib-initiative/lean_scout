@@ -6,7 +6,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .utils import stream_json_lines
-from .writer import ShardedParquetWriter
+from .writer import Writer
 
 
 class ProcessProtocol(Protocol):
@@ -24,7 +24,8 @@ class Orchestrator:
         self,
         command: str,
         root_path: Path,
-        writer: ShardedParquetWriter,
+        cmd_root: Path,
+        writer: Writer,
         imports: Optional[List[str]] = None,
         read_files: Optional[List[str]] = None,
         num_workers: int = 1,
@@ -35,13 +36,15 @@ class Orchestrator:
         Args:
             command: Extractor command (e.g., "types", "tactics")
             root_path: Path to package root directory
+            cmd_root: Path where the CLI command was invoked (for resolving relative inputs)
             writer: Shared ShardedParquetWriter instance
             imports: List of modules to import (for .imports target)
             read_files: List of Lean files to read (for .input target, parallel processing)
             num_workers: Number of parallel Lean workers (default: 1, sequential)
         """
         self.command = command
-        self.root_path = Path(root_path)
+        self.root_path = Path(root_path).resolve()
+        self.cmd_root = Path(cmd_root).resolve()
         self.writer = writer
         self.imports = imports
         self.read_files = read_files
@@ -52,6 +55,9 @@ class Orchestrator:
             raise ValueError("Cannot specify both --imports and --read")
         if not imports and not read_files:
             raise ValueError("Must specify either --imports or --read")
+
+        if self.read_files:
+            self.read_files = self._normalize_read_paths(self.read_files)
 
     def run(self) -> dict:
         """
@@ -201,6 +207,27 @@ class Orchestrator:
                 f"Lean subprocess failed with exit code {returncode}\n"
                 f"File: {file_path}"
             )
+
+    def _normalize_read_paths(self, read_files: List[str]) -> List[str]:
+        """
+        Resolve relative read paths against the command root, falling back to the package root when needed.
+        """
+        normalized: List[str] = []
+        for file_path in read_files:
+            candidate = Path(file_path).expanduser()
+            if candidate.is_absolute():
+                normalized.append(str(candidate.resolve()))
+                continue
+
+            cmd_candidate = (self.cmd_root / candidate).resolve()
+            root_candidate = (self.root_path / candidate).resolve()
+
+            if cmd_candidate.exists() or not root_candidate.exists():
+                normalized.append(str(cmd_candidate))
+            else:
+                normalized.append(str(root_candidate))
+
+        return normalized
 
     def _process_subprocess_output(self, process: ProcessProtocol) -> None:
         """
