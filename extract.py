@@ -62,6 +62,10 @@ def ensure_subproject(subproject_dir: Path) -> None:
     lakefile_path = subproject_dir / "lakefile.toml"
     if not lakefile_path.exists():
         lakefile_path.write_text(get_lakefile_content())
+    # Copy lean-toolchain to ensure the subproject uses the same Lean version
+    toolchain_dest = subproject_dir / "lean-toolchain"
+    if not toolchain_dest.exists():
+        toolchain_dest.write_text(LEAN_TOOLCHAIN + "\n")
 
 
 def run_in_subproject(cmd: list[str], subproject_dir: Path) -> None:
