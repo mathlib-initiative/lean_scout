@@ -83,5 +83,4 @@ addopts = [
     "--strict-markers",
     "--cov=lean_scout",
     "--cov-report=term-missing",
-    "--cov-report=html",
 ]

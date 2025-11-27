@@ -31,7 +31,7 @@ class Orchestrator:
         imports: list[str] | None = None,
         read_files: list[str] | None = None,
         num_workers: int = 1,
-    ):
+    ) -> None:
         """
         Initialize orchestrator.
 
@@ -61,7 +61,7 @@ class Orchestrator:
         if self.read_files:
             self.read_files = self._normalize_read_paths(self.read_files)
 
-    def run(self) -> dict:
+    def run(self) -> dict[str, Any]:
         """
         Run extraction and return statistics.
 
@@ -166,7 +166,7 @@ class Orchestrator:
                     + "\n".join(f"  - {err}" for err in errors)
                 )
 
-    def _spawn_lean_subprocess(self, file_path: str | None = None) -> subprocess.Popen:
+    def _spawn_lean_subprocess(self, file_path: str | None = None) -> subprocess.Popen[str]:
         """
         Spawn a single Lean extractor subprocess.
 

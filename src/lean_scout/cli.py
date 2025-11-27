@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .orchestrator import Orchestrator
 from .utils import deserialize_schema
-from .writer import JsonLinesWriter, ShardedParquetWriter
+from .writer import JsonLinesWriter, ShardedParquetWriter, Writer
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +154,7 @@ def resolve_directories(
     return root_path, cmd_root, base_path
 
 
-def main():
+def main() -> None:
     """Main CLI entry point for lean-scout."""
     parser = argparse.ArgumentParser(
         description="Extract structured data from Lean4 projects",
@@ -288,23 +288,27 @@ Examples:
         )
 
     # Resolve key directories (command root influences both input and output resolution)
-    root_path, cmd_root, base_path = resolve_directories(
+    root_path, cmd_root, resolved_base_path = resolve_directories(
         root_path_arg=args.rootPath,
         data_dir_arg=args.dataDir,
         cmd_root_arg=args.cmdRoot,
         command=args.command,
     )
+    base_path: Path | None = resolved_base_path
+    output_dir: Path | None
 
     if args.jsonl:
         base_path = None
+        output_dir = None
     else:
+        output_dir = resolved_base_path
         # Check if output directory already exists
-        if base_path.exists():
-            logger.error("Data directory %s already exists. Aborting.", base_path)
+        if output_dir.exists():
+            logger.error("Data directory %s already exists. Aborting.", output_dir)
             sys.exit(1)
 
         # Create output directory
-        base_path.mkdir(parents=True, exist_ok=False)
+        output_dir.mkdir(parents=True, exist_ok=False)
 
     try:
         # Determine read files list
@@ -322,7 +326,7 @@ Examples:
 
         # Create writer
         if args.jsonl:
-            writer = JsonLinesWriter()
+            writer: Writer = JsonLinesWriter()
         else:
             # Parquet path: fetch schema (for shard key and Arrow schema)
             logger.info("Querying schema for command '%s'...", args.command)
@@ -337,9 +341,10 @@ Examples:
                 )
             key = schema_obj["key"]
 
+            assert output_dir is not None
             writer = ShardedParquetWriter(
                 schema=schema,
-                out_dir=str(base_path),
+                out_dir=str(output_dir),
                 num_shards=args.numShards,
                 batch_rows=args.batchRows,
                 shard_key=key,
