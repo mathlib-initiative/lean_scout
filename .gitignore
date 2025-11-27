@@ -4,3 +4,6 @@ __pycache__/
 .ipynb_checkpoints
 .pytest_cache
 .venv
+.local
+.coverage
+htmlcov/

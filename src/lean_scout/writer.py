@@ -1,13 +1,13 @@
+import hashlib
 import json
+import logging
 import os
 import sys
-import hashlib
 import threading
-import logging
 from typing import Any, TextIO
-import pyarrow as pa
-import pyarrow.parquet as pq
 
+import pyarrow as pa  # type: ignore[import-untyped]
+import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -15,23 +15,24 @@ logger = logging.getLogger(__name__)
 class Writer:
     """Abstract base class for data writers."""
 
-    def add_record(self, record: dict) -> None:  # noqa: ARG002
+    def add_record(self, record: dict[str, Any]) -> None:
         """Add a record to the writer."""
         raise NotImplementedError()
 
-    def close(self) -> dict:
+    def close(self) -> dict[str, Any]:
         """Close the writer and return statistics."""
         raise NotImplementedError()
+
 
 class JsonLinesWriter(Writer):
     """Writes records as JSON Lines to a stream (default: stdout)."""
 
-    def __init__(self, stream: TextIO | None = None):
+    def __init__(self, stream: TextIO | None = None) -> None:
         self.stream = stream if stream is not None else sys.stdout
         self.count = 0
         self._lock = threading.Lock()
 
-    def add_record(self, record: dict) -> None:
+    def add_record(self, record: dict[str, Any]) -> None:
         """Add a record to the output stream."""
         line = json.dumps(record, ensure_ascii=False)
         with self._lock:
@@ -39,10 +40,11 @@ class JsonLinesWriter(Writer):
             self.stream.flush()
             self.count += 1
 
-    def close(self) -> dict:
+    def close(self) -> dict[str, int]:
         """Close the writer and return statistics."""
         with self._lock:
             return {"total_rows": self.count}
+
 
 class ShardedParquetWriter(Writer):
     """Manages sharded parquet file writing with batching."""
@@ -54,8 +56,8 @@ class ShardedParquetWriter(Writer):
         num_shards: int,
         batch_rows: int,
         shard_key: str,
-        compression: str = "zstd"
-    ):
+        compression: str = "zstd",
+    ) -> None:
         self.schema = schema
         self.out_dir = out_dir
         self.num_shards = num_shards
@@ -63,10 +65,10 @@ class ShardedParquetWriter(Writer):
         self.shard_key = shard_key
         self.compression = compression
 
-        self.writers = {}   # shard -> pq.ParquetWriter (opened lazily)
-        self.buffers = {}   # shard -> []
-        self.counts = {}    # shard -> total rows written
-        self.paths = {}     # shard -> file path
+        self.writers: dict[int, pq.ParquetWriter] = {}  # shard -> pq.ParquetWriter (opened lazily)
+        self.buffers: dict[int, list[dict[str, Any]]] = {}  # shard -> []
+        self.counts: dict[int, int] = {}  # shard -> total rows written
+        self.paths: dict[int, str] = {}  # shard -> file path
 
         self._lock = threading.Lock()
 
@@ -74,14 +76,11 @@ class ShardedParquetWriter(Writer):
 
     def _compute_shard(self, value: Any) -> int:
         """Hash a value to determine its shard. Converts to string if needed."""
-        if isinstance(value, str):
-            s = value
-        else:
-            s = json.dumps(value, sort_keys=True)
+        s = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
         h = hashlib.blake2b(s.encode("utf-8"), digest_size=8).digest()
         return int.from_bytes(h, "big") % self.num_shards
 
-    def add_record(self, record: dict) -> None:
+    def add_record(self, record: dict[str, Any]) -> None:
         """Add a record to the appropriate shard buffer, flushing if needed."""
 
         shard_key_value = record.get(self.shard_key)
@@ -133,13 +132,12 @@ class ShardedParquetWriter(Writer):
             for shard in list(self.buffers.keys()):
                 self._flush_shard_unsafe(shard)
 
-    def close(self) -> dict:
+    def close(self) -> dict[str, int | str]:
         """Close all writers and return statistics.
 
         Should only be called once, after all records have been added.
         """
         with self._lock:
-
             for shard in list(self.buffers.keys()):
                 self._flush_shard_unsafe(shard)
 
@@ -149,5 +147,5 @@ class ShardedParquetWriter(Writer):
             return {
                 "total_rows": sum(self.counts.values()) if self.counts else 0,
                 "num_shards": len(self.writers),
-                "out_dir": self.out_dir
+                "out_dir": self.out_dir,
             }
