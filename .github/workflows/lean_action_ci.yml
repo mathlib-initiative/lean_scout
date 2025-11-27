@@ -24,6 +24,9 @@ jobs:
 
       - uses: leanprover/lean-action@v1
 
+      - name: Lint (ruff)
+        run: uv run ruff check src/ test/ extract.py
+
       - name: Run tests
         run: ./run_tests
 
