@@ -18,7 +18,7 @@ public unsafe def tactics : DataExtractor where
     ]},
     { name := "ppTac", nullable := false, type := .string },
     { name := "elaborator", nullable := false, type := .string },
-    { name := "name", nullable := true, type := .string },
+    { name := "kind", nullable := false, type := .string },
   ]
   key := "ppTac"
   go sink
@@ -29,9 +29,6 @@ public unsafe def tactics : DataExtractor where
       if tacFilter.contains info.stx.getKind then return
       let ppTac : String := toString info.stx.prettyPrint
       let elaborator := info.elaborator
-      let name : Option Name := match info.stx with
-        | .node _ n _ => n
-        | _ => none
       let goals : List Json ← info.goalsBefore.mapM fun mvarId =>
         mvarId.withContext do
           let goal ← Lean.Meta.ppGoal mvarId
@@ -45,7 +42,7 @@ public unsafe def tactics : DataExtractor where
         goals : $(goals),
         ppTac : $(ppTac),
         elaborator : $(elaborator),
-        name : $(name)
+        kind : $(info.stx.getKind)
       }
   | _ => throw <| .userError "Unsupported Target"
 

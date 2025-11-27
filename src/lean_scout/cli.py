@@ -4,9 +4,11 @@ import argparse
 import json
 import logging
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
+from types import FrameType
 
 from .orchestrator import Orchestrator
 from .utils import deserialize_schema
@@ -314,6 +316,23 @@ Examples:
     writer: Writer | None = None
     interrupted = False
 
+    def sigint_handler(signum: int, frame: FrameType | None) -> None:
+        """Handle SIGINT by cleaning up processes immediately."""
+        nonlocal interrupted
+        if interrupted:
+            # Second CTRL-C: force exit
+            sys.exit(130)
+        interrupted = True
+        logger.warning("Interrupted by user. Cleaning up...")
+        if orchestrator is not None:
+            orchestrator.cleanup()
+        if writer is not None:
+            writer.close()
+        sys.exit(130)
+
+    # Install signal handler for immediate cleanup on CTRL-C
+    original_sigint = signal.signal(signal.SIGINT, sigint_handler)
+
     try:
         # Determine read files list
         read_files = None
@@ -381,6 +400,7 @@ Examples:
             )
 
     except KeyboardInterrupt:
+        # Fallback: signal handler should have handled this, but just in case
         interrupted = True
         logger.warning("Interrupted by user. Cleaning up...")
 
@@ -394,6 +414,8 @@ Examples:
         sys.exit(1)
 
     finally:
+        # Restore original signal handler
+        signal.signal(signal.SIGINT, original_sigint)
         # Ensure cleanup on any exit (including Ctrl+C)
         if orchestrator is not None:
             orchestrator.cleanup()
