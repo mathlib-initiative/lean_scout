@@ -59,6 +59,7 @@ class Orchestrator:
         # Process tracking for cleanup
         self._processes: list[subprocess.Popen[str]] = []
         self._process_lock = threading.Lock()
+        self._shutdown = False  # Flag to prevent spawning new processes during cleanup
 
         # Validate arguments
         if imports and read_files:
@@ -233,8 +234,12 @@ class Orchestrator:
             file_path: Path to Lean file to process
 
         Raises:
-            RuntimeError: If subprocess fails
+            RuntimeError: If subprocess fails or shutdown is in progress
         """
+        # Check if shutdown was requested before spawning new process
+        if self._shutdown:
+            raise RuntimeError("Shutdown in progress, not spawning new process")
+
         process = self._spawn_lean_subprocess(file_path)
         try:
             self._process_subprocess_output(process)
@@ -286,11 +291,16 @@ class Orchestrator:
 
     def cleanup(self) -> None:
         """Terminate all running subprocesses and their children for graceful shutdown."""
+        # Set shutdown flag to prevent new processes from being spawned
+        self._shutdown = True
+
         with self._process_lock:
             processes = list(self._processes)
 
         if not processes:
             return
+
+        logger.info("Terminating %d subprocess(es)...", len(processes))
 
         # Send SIGTERM to all process groups (kills lake and its children)
         for process in processes:
@@ -303,6 +313,7 @@ class Orchestrator:
             try:
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
+                logger.warning("Process %d did not terminate gracefully, forcing...", process.pid)
                 with contextlib.suppress(ProcessLookupError, PermissionError):
                     os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
