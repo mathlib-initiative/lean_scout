@@ -1,9 +1,9 @@
 """Helper utilities for testing data extractors."""
-import subprocess
 import json
+import subprocess
 from pathlib import Path
-from datasets import Dataset
 
+from datasets import Dataset
 
 TEST_PROJECT_DIR = Path(__file__).parent.parent / "test_project"
 

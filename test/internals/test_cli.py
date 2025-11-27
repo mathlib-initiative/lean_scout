@@ -5,13 +5,14 @@ Tests focus on:
 - File list reading
 - Library path querying
 """
-import pytest
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from lean_scout.cli import (
-    read_file_list,
     query_library_paths,
+    read_file_list,
     resolve_directories,
 )
 

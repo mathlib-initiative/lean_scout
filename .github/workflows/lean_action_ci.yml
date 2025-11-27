@@ -1,4 +1,4 @@
-name: Lean Action CI
+name: Lint/test and tag on main
 
 on:
   push:
@@ -23,6 +23,9 @@ jobs:
           python-version: "3.13"
 
       - uses: leanprover/lean-action@v1
+
+      - name: Lint (ruff)
+        run: uv run ruff check src/ test/ extract.py
 
       - name: Run tests
         run: ./run_tests

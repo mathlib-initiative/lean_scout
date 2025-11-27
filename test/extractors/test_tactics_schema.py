@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from helpers import get_schema_json
+
 from lean_scout.utils import deserialize_schema
 
 

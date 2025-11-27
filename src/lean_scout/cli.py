@@ -310,6 +310,10 @@ Examples:
         # Create output directory
         output_dir.mkdir(parents=True, exist_ok=False)
 
+    orchestrator: Orchestrator | None = None
+    writer: Writer | None = None
+    interrupted = False
+
     try:
         # Determine read files list
         read_files = None
@@ -326,7 +330,7 @@ Examples:
 
         # Create writer
         if args.jsonl:
-            writer: Writer = JsonLinesWriter()
+            writer = JsonLinesWriter()
         else:
             # Parquet path: fetch schema (for shard key and Arrow schema)
             logger.info("Querying schema for command '%s'...", args.command)
@@ -376,6 +380,10 @@ Examples:
                 stats["out_dir"],
             )
 
+    except KeyboardInterrupt:
+        interrupted = True
+        logger.warning("Interrupted by user. Cleaning up...")
+
     except Exception as e:
         # Clean up output directory on error (only for parquet)
         if base_path is not None and base_path.exists():
@@ -384,6 +392,17 @@ Examples:
             shutil.rmtree(base_path)
         logger.exception("Extraction failed: %s", e)
         sys.exit(1)
+
+    finally:
+        # Ensure cleanup on any exit (including Ctrl+C)
+        if orchestrator is not None:
+            orchestrator.cleanup()
+        if writer is not None and interrupted:
+            # Close writer to flush buffered data on interrupt
+            writer.close()
+
+    if interrupted:
+        sys.exit(130)  # Standard exit code for SIGINT
 
 
 if __name__ == "__main__":

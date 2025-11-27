@@ -8,17 +8,18 @@ Tests focus on:
 - File creation and statistics
 - JSON Lines output to stdout
 """
-import pytest
+import glob
+import io
+import json
+import sys
 import tempfile
 import threading
-import io
-import sys
-import json
 from pathlib import Path
-from typing import cast, Any
-from datasets import Dataset
-import glob
+from typing import Any, cast
+
 import pyarrow as pa
+import pytest
+from datasets import Dataset
 
 from lean_scout.writer import JsonLinesWriter, ShardedParquetWriter
 
@@ -220,7 +221,7 @@ def test_writer_output_files_valid(simple_schema, writer_dir):
     assert len(parquet_paths) > 0, "Should create parquet files"
 
     # Load and verify data
-    dataset = cast(Dataset, Dataset.from_parquet([str(p) for p in parquet_paths]))
+    dataset = cast("Dataset", Dataset.from_parquet([str(p) for p in parquet_paths]))
     assert len(dataset) == len(test_data), "Should have all records in dataset"
 
     # Verify schema
@@ -253,7 +254,7 @@ def test_writer_nullable_fields(writer_dir):
 
     # Verify nullable fields in output
     parquet_paths = list(writer_dir.glob("*.parquet"))
-    dataset = cast(Dataset, Dataset.from_parquet([str(p) for p in parquet_paths]))
+    dataset = cast("Dataset", Dataset.from_parquet([str(p) for p in parquet_paths]))
     records: list[dict[str, Any]] = [dict(record) for record in dataset]
 
     # Find the record with None value
