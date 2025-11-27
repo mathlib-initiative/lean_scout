@@ -1,6 +1,9 @@
 """Orchestrates Lean subprocess execution and coordinates data writing."""
 
+import contextlib
 import logging
+import os
+import signal
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -202,6 +205,7 @@ class Orchestrator:
         # stdout: piped for JSON output
         # stderr: inherit parent's stderr (no buffering issues)
         # stdin: closed (not needed)
+        # start_new_session: create new process group so we can kill entire tree
         process = subprocess.Popen(
             args,
             stdout=subprocess.PIPE,
@@ -210,6 +214,7 @@ class Orchestrator:
             text=True,
             bufsize=1,
             cwd=self.root_path,
+            start_new_session=True,  # Create new process group for cleanup
         )
 
         # Track process for cleanup
@@ -280,22 +285,24 @@ class Orchestrator:
             self.writer.add_record(record)
 
     def cleanup(self) -> None:
-        """Terminate all running subprocesses for graceful shutdown."""
+        """Terminate all running subprocesses and their children for graceful shutdown."""
         with self._process_lock:
             processes = list(self._processes)
 
         if not processes:
             return
 
-        # Send SIGTERM to all running processes
+        # Send SIGTERM to all process groups (kills lake and its children)
         for process in processes:
             if process.poll() is None:  # Still running
-                process.terminate()
+                with contextlib.suppress(ProcessLookupError, PermissionError):
+                    os.killpg(process.pid, signal.SIGTERM)
 
         # Wait for graceful termination, then force kill if needed
         for process in processes:
             try:
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
-                process.kill()
+                with contextlib.suppress(ProcessLookupError, PermissionError):
+                    os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
