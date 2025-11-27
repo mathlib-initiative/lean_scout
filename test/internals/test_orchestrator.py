@@ -6,12 +6,13 @@ Tests focus on:
 - Output parsing
 - Error handling
 """
-import pytest
 import tempfile
-from pathlib import Path
 from io import StringIO
-from typing import Optional, IO, Any
+from pathlib import Path
+from typing import IO, Any
+
 import pyarrow as pa
+import pytest
 
 from lean_scout.orchestrator import Orchestrator
 from lean_scout.writer import ShardedParquetWriter
@@ -20,16 +21,16 @@ from lean_scout.writer import ShardedParquetWriter
 class FakeProcess:
     """Minimal fake process for testing that implements the Popen interface subset we need."""
 
-    def __init__(self, stdout: Optional[IO[Any]]):
+    def __init__(self, stdout: IO[Any] | None):
         self.stdout = stdout
-        self.stderr: Optional[IO[Any]] = None
-        self.returncode: Optional[int] = None
+        self.stderr: IO[Any] | None = None
+        self.returncode: int | None = None
 
     def wait(self) -> int:
         """Mock wait that returns 0 (success)."""
         return 0
 
-    def poll(self) -> Optional[int]:
+    def poll(self) -> int | None:
         """Mock poll that returns None (still running)."""
         return None
 

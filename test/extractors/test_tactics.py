@@ -1,13 +1,14 @@
 """Tests for tactics data extractor using test_project."""
-import pytest
-import yaml
+import glob
 import json
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, cast
-import sys
-import glob
+
+import pytest
+import yaml
 from datasets import Dataset
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -24,7 +25,7 @@ def load_tactics_dataset(tactics_dir: Path) -> Dataset:
         raise RuntimeError(f"No parquet files found in {tactics_dir}")
 
     # Dataset.from_parquet returns Dataset when given a list of file paths
-    result = Dataset.from_parquet(cast(Any, parquet_files))
+    result = Dataset.from_parquet(cast("Any", parquet_files))
     assert isinstance(result, Dataset)
     return result
 
@@ -65,24 +66,24 @@ def tactics_dataset():
 @pytest.fixture(scope="module")
 def tactics_spec():
     spec_path = Path(__file__).parent.parent / "fixtures" / "tactics.yaml"
-    with open(spec_path, 'r') as f:
+    with open(spec_path) as f:
         return yaml.safe_load(f)
 
 
 def test_tactics_exact_matches(tactics_dataset, tactics_spec):
     for expected in tactics_spec['exact_matches']:
-        ppTac = expected['ppTac']
-        records = get_records_by_tactic(tactics_dataset, ppTac)
+        pp_tac = expected['ppTac']
+        records = get_records_by_tactic(tactics_dataset, pp_tac)
 
-        assert len(records) > 0, f"Tactic not found: {ppTac}"
+        assert len(records) > 0, f"Tactic not found: {pp_tac}"
 
         if expected.get('goals_not_empty', False):
             for record in records:
-                assert 'goals' in record, f"Missing goals field for tactic: {ppTac}"
+                assert 'goals' in record, f"Missing goals field for tactic: {pp_tac}"
                 assert isinstance(record['goals'], list), \
-                    f"goals should be a list for tactic: {ppTac}"
+                    f"goals should be a list for tactic: {pp_tac}"
                 assert len(record['goals']) > 0, \
-                    f"goals should not be empty for tactic: {ppTac}"
+                    f"goals should not be empty for tactic: {pp_tac}"
 
 
 def test_tactics_contains(tactics_dataset, tactics_spec):

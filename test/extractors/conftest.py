@@ -1,8 +1,8 @@
 """Shared fixtures for extractor tests."""
 import subprocess
-import pytest
 from pathlib import Path
 
+import pytest
 
 TEST_PROJECT_DIR = Path(__file__).parent.parent.parent / "test_project"
 

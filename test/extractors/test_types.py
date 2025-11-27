@@ -1,23 +1,24 @@
 """Tests for types data extractor using test_project."""
-import pytest
-import yaml
+import glob
 import json
-import tempfile
 import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from typing import Any, cast
-import sys
-import glob
+
+import pytest
+import yaml
 from datasets import Dataset
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from helpers import (
     TEST_PROJECT_DIR,
-    get_record_by_name,
-    assert_record_exact_match,
     assert_record_contains,
+    assert_record_exact_match,
     assert_record_not_null,
+    get_record_by_name,
 )
 
 
@@ -43,7 +44,7 @@ def load_types_dataset(types_dir: Path) -> Dataset:
         raise RuntimeError(f"No parquet files found in {types_dir}")
 
     # Dataset.from_parquet returns Dataset when given a list of file paths
-    result = Dataset.from_parquet(cast(Any, parquet_files))
+    result = Dataset.from_parquet(cast("Any", parquet_files))
     assert isinstance(result, Dataset)
     return result
 
@@ -64,7 +65,7 @@ def types_dataset_imports():
 @pytest.fixture(scope="module")
 def types_spec():
     spec_path = Path(__file__).parent.parent / "fixtures" / "types.yaml"
-    with open(spec_path, 'r') as f:
+    with open(spec_path) as f:
         return yaml.safe_load(f)
 
 
@@ -92,7 +93,7 @@ def test_types_imports_properties(types_dataset_imports, types_spec):
         if 'type_contains' in props:
             assert_record_contains(actual, 'type', props['type_contains'])
 
-        if 'module_not_null' in props and props['module_not_null']:
+        if props.get('module_not_null'):
             assert_record_not_null(actual, 'module')
 
 
@@ -132,7 +133,7 @@ def test_types_imports_schema(types_dataset_imports):
 
 
 def test_types_imports_modules(types_dataset_imports):
-    modules = set(r['module'] for r in types_dataset_imports if r['module'])
+    modules = {r['module'] for r in types_dataset_imports if r['module']}
 
     expected_modules = {
         "LeanScoutTestProject.Basic",
