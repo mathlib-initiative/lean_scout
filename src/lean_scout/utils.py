@@ -1,9 +1,10 @@
 """Utility functions for Lean Scout."""
+
 import json
 import logging
-from typing import Iterator
-import pyarrow as pa
+from collections.abc import Iterator
 
+import pyarrow as pa
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +21,8 @@ def stream_json_lines(input_stream) -> Iterator[dict]:
             # Log malformed JSON with truncated content for debugging
             line_preview = line[:100] + "..." if len(line) > 100 else line
             logger.warning(
-                "Skipping malformed JSON at line %d: %s (error: %s)",
-                line_num,
-                line_preview,
-                str(e)
-            ) 
+                "Skipping malformed JSON at line %d: %s (error: %s)", line_num, line_preview, str(e)
+            )
 
 
 def datatype_from_json(type_obj: dict) -> pa.DataType:

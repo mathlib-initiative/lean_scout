@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Wrapper script for using Lean Scout as a dependency in other projects."""
+
 import json
 import os
 import subprocess

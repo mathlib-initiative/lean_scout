@@ -1,21 +1,21 @@
 """Main CLI entry point for lean-scout."""
-import sys
-import argparse
-import subprocess
-import json
-import os
-import logging
-from pathlib import Path
-from typing import List, Optional
 
+import argparse
+import json
+import logging
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from .orchestrator import Orchestrator
 from .utils import deserialize_schema
 from .writer import JsonLinesWriter, ShardedParquetWriter
-from .orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
 
 
-def read_file_list(file_list_path: str, base_path: Optional[Path] = None) -> List[str]:
+def read_file_list(file_list_path: str, base_path: Path | None = None) -> list[str]:
     """
     Read a list of file paths from a file (one per line).
 
@@ -36,7 +36,7 @@ def read_file_list(file_list_path: str, base_path: Optional[Path] = None) -> Lis
     if not path.exists():
         raise FileNotFoundError(f"File list not found: {file_list_path}")
 
-    with open(path, 'r') as f:
+    with open(path) as f:
         lines = [line.strip() for line in f if line.strip()]
 
     if not lines:
@@ -45,7 +45,7 @@ def read_file_list(file_list_path: str, base_path: Optional[Path] = None) -> Lis
     return lines
 
 
-def query_library_paths(library: str, root_path: Path) -> List[str]:
+def query_library_paths(library: str, root_path: Path) -> list[str]:
     """
     Query module paths for a library using lake query.
 
@@ -125,8 +125,8 @@ def configure_logging(log_level: str) -> None:
 
 def resolve_directories(
     root_path_arg: str,
-    data_dir_arg: Optional[str],
-    cmd_root_arg: Optional[str],
+    data_dir_arg: str | None,
+    cmd_root_arg: str | None,
     command: str,
 ) -> tuple[Path, Path, Path]:
     """
@@ -178,74 +178,60 @@ Examples:
 
   # Specify custom data directory and sharding
   lean-scout --command types --dataDir ~/storage --numShards 32 --imports Lean
-        """
+        """,
     )
 
     # Required arguments
     parser.add_argument(
         "--command",
         required=True,
-        help="Extractor command to run (e.g., types, tactics). Use 'extractors' to list available commands."
+        help="Extractor command to run (e.g., types, tactics). Use 'extractors' to list available commands.",
     )
 
     # Target specification (mutually exclusive, not required for 'extractors' command)
     target_group = parser.add_mutually_exclusive_group(required=False)
     target_group.add_argument(
-        "--imports",
-        nargs='+',
-        help="Modules to import (e.g., Lean, Mathlib)"
+        "--imports", nargs="+", help="Modules to import (e.g., Lean, Mathlib)"
     )
     target_group.add_argument(
         "--read",
-        nargs='+',
-        help="Lean file(s) to read and process. Multiple files will be processed in parallel."
+        nargs="+",
+        help="Lean file(s) to read and process. Multiple files will be processed in parallel.",
     )
     target_group.add_argument(
         "--readList",
-        help="File containing list of Lean files to read (one per line). Files will be processed in parallel."
+        help="File containing list of Lean files to read (one per line). Files will be processed in parallel.",
     )
     target_group.add_argument(
         "--library",
-        help="Library name to extract from (e.g., LeanScoutTest, Mathlib). Queries module paths using lake query -q <library>:module_paths."
+        help="Library name to extract from (e.g., LeanScoutTest, Mathlib). Queries module paths using lake query -q <library>:module_paths.",
     )
 
     # Optional arguments
-    parser.add_argument(
-        "--dataDir",
-        default=None,
-        help="Base output directory (default: cmdRoot)"
-    )
+    parser.add_argument("--dataDir", default=None, help="Base output directory (default: cmdRoot)")
     parser.add_argument(
         "--cmdRoot",
         dest="cmdRoot",
         default=None,
         help="Root directory where the command was invoked. Used to resolve relative inputs and outputs "
-             "(default: current working directory)."
+        "(default: current working directory).",
     )
     parser.add_argument(
-        "--numShards",
-        type=int,
-        default=128,
-        help="Number of output shards (default: 128)"
+        "--numShards", type=int, default=128, help="Number of output shards (default: 128)"
     )
     parser.add_argument(
-        "--batchRows",
-        type=int,
-        default=1024,
-        help="Rows per batch before flushing (default: 1024)"
+        "--batchRows", type=int, default=1024, help="Rows per batch before flushing (default: 1024)"
     )
     parser.add_argument(
-        "--rootPath",
-        default=".",
-        help="Package root directory (default: current directory)"
+        "--rootPath", default=".", help="Package root directory (default: current directory)"
     )
     parser.add_argument(
         "--parallel",
         type=int,
         default=None,
         help="Number of parallel workers for file extraction (default: CPU count). "
-             "Only applies to --read/--readList/--library with multiple files. "
-             "Actual workers used: min(num_files, --parallel)"
+        "Only applies to --read/--readList/--library with multiple files. "
+        "Actual workers used: min(num_files, --parallel)",
     )
     parser.add_argument(
         "--logLevel",
@@ -265,21 +251,21 @@ Examples:
 
     # Validate --parallel flag
     # Use number of CPU cores as maximum (default to 32 if can't determine)
-    MAX_WORKERS = os.cpu_count() or 32
+    max_workers = os.cpu_count() or 32
 
     # Set default parallel workers to CPU count if not specified
     if args.parallel is None:
-        args.parallel = MAX_WORKERS
+        args.parallel = max_workers
     if args.parallel < 1:
         parser.error(f"--parallel must be at least 1, got {args.parallel}")
-    if args.parallel > MAX_WORKERS:
+    if args.parallel > max_workers:
         logger.warning(
             "--parallel %s exceeds number of CPU cores (%s). Using %s instead.",
             args.parallel,
-            MAX_WORKERS,
-            MAX_WORKERS,
+            max_workers,
+            max_workers,
         )
-        args.parallel = MAX_WORKERS
+        args.parallel = max_workers
 
     if args.numShards < 1:
         parser.error(f"--numShards must be at least 1, got {args.numShards}")
@@ -297,7 +283,9 @@ Examples:
 
     # Validate that target is specified for all other commands
     if not args.imports and not args.read and not args.readList and not args.library:
-        parser.error("one of the arguments --imports --read --readList --library is required (except for 'extractors' command)")
+        parser.error(
+            "one of the arguments --imports --read --readList --library is required (except for 'extractors' command)"
+        )
 
     # Resolve key directories (command root influences both input and output resolution)
     root_path, cmd_root, base_path = resolve_directories(
@@ -344,7 +332,9 @@ Examples:
             # Extract shard key from schema metadata
             schema_obj = json.loads(schema_json)
             if "key" not in schema_obj:
-                raise ValueError(f"Schema for command '{args.command}' missing required 'key' field")
+                raise ValueError(
+                    f"Schema for command '{args.command}' missing required 'key' field"
+                )
             key = schema_obj["key"]
 
             writer = ShardedParquetWriter(
@@ -385,9 +375,11 @@ Examples:
         # Clean up output directory on error (only for parquet)
         if base_path is not None and base_path.exists():
             import shutil
+
             shutil.rmtree(base_path)
         logger.exception("Extraction failed: %s", e)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

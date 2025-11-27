@@ -1,9 +1,10 @@
 """Orchestrates Lean subprocess execution and coordinates data writing."""
+
 import logging
 import subprocess
-from typing import Optional, List, Protocol, IO, Any
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import IO, Any, Protocol
 
 from .utils import stream_json_lines
 from .writer import Writer
@@ -11,7 +12,8 @@ from .writer import Writer
 
 class ProcessProtocol(Protocol):
     """Protocol for subprocess-like objects that can be used for extraction."""
-    stdout: Optional[IO[Any]]
+
+    stdout: IO[Any] | None
 
 
 logger = logging.getLogger(__name__)
@@ -26,8 +28,8 @@ class Orchestrator:
         root_path: Path,
         cmd_root: Path,
         writer: Writer,
-        imports: Optional[List[str]] = None,
-        read_files: Optional[List[str]] = None,
+        imports: list[str] | None = None,
+        read_files: list[str] | None = None,
         num_workers: int = 1,
     ):
         """
@@ -110,13 +112,12 @@ class Orchestrator:
         # Wait for subprocess to complete
         returncode = process.wait()
         if returncode != 0:
-            raise RuntimeError(
-                f"Lean subprocess failed with exit code {returncode}"
-            )
+            raise RuntimeError(f"Lean subprocess failed with exit code {returncode}")
 
     def _run_single_file(self) -> None:
-
-        assert self.read_files is not None and len(self.read_files) == 1, "Expected exactly one read file"
+        assert self.read_files is not None and len(self.read_files) == 1, (
+            "Expected exactly one read file"
+        )
 
         logger.info("Processing single file: %s", self.read_files[0])
         process = self._spawn_lean_subprocess(self.read_files[0])
@@ -125,13 +126,13 @@ class Orchestrator:
         returncode = process.wait()
         if returncode != 0:
             raise RuntimeError(
-                f"Lean subprocess failed with exit code {returncode}\n"
-                f"File: {self.read_files[0]}"
+                f"Lean subprocess failed with exit code {returncode}\nFile: {self.read_files[0]}"
             )
 
     def _run_multiple_files(self) -> None:
-
-        assert self.read_files is not None and len(self.read_files) > 1, "Expected multiple read files"
+        assert self.read_files is not None and len(self.read_files) > 1, (
+            "Expected multiple read files"
+        )
 
         num_files = len(self.read_files)
         max_workers = min(self.num_workers, num_files)
@@ -161,11 +162,11 @@ class Orchestrator:
 
             if errors:
                 raise RuntimeError(
-                    f"Failed to process {failed}/{num_files} files:\n" +
-                    "\n".join(f"  - {err}" for err in errors)
+                    f"Failed to process {failed}/{num_files} files:\n"
+                    + "\n".join(f"  - {err}" for err in errors)
                 )
 
-    def _spawn_lean_subprocess(self, file_path: Optional[str] = None) -> subprocess.Popen:
+    def _spawn_lean_subprocess(self, file_path: str | None = None) -> subprocess.Popen:
         """
         Spawn a single Lean extractor subprocess.
 
@@ -179,8 +180,12 @@ class Orchestrator:
         assert self.imports or file_path, "Either imports or file_path must be specified"
 
         args = [
-            "lake", "exe", "-q", "lean_scout",
-            "--command", self.command,
+            "lake",
+            "exe",
+            "-q",
+            "lean_scout",
+            "--command",
+            self.command,
         ]
 
         if self.imports:
@@ -222,15 +227,14 @@ class Orchestrator:
         returncode = process.wait()
         if returncode != 0:
             raise RuntimeError(
-                f"Lean subprocess failed with exit code {returncode}\n"
-                f"File: {file_path}"
+                f"Lean subprocess failed with exit code {returncode}\nFile: {file_path}"
             )
 
-    def _normalize_read_paths(self, read_files: List[str]) -> List[str]:
+    def _normalize_read_paths(self, read_files: list[str]) -> list[str]:
         """
         Resolve relative read paths against the command root, falling back to the package root when needed.
         """
-        normalized: List[str] = []
+        normalized: list[str] = []
         for file_path in read_files:
             candidate = Path(file_path).expanduser()
             if candidate.is_absolute():
