@@ -1,12 +1,10 @@
 """Lean Scout - A tool for creating datasets from Lean4 projects.
 
-This package provides tools for extracting structured data from Lean4 projects
-and storing them as sharded Parquet files.
+This package provides tools for extracting structured data from Lean4 projects.
 
 Architecture:
     Python orchestrates Lean subprocess(es) that extract data and output JSON.
-    The orchestrator feeds JSON to a shared pool of Parquet writers for efficient
-    parallel extraction.
+    The orchestrator feeds JSON to a writer.
 """
 
 from .utils import (
@@ -16,6 +14,7 @@ from .utils import (
 
 from .writer import (
     ShardedParquetWriter,
+    JsonLinesWriter
 )
 
 from .orchestrator import (
@@ -26,5 +25,6 @@ __all__ = [
     "deserialize_schema",
     "stream_json_lines",
     "ShardedParquetWriter",
+    "JsonLinesWriter",
     "Orchestrator",
 ]
