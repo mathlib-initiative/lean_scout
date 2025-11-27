@@ -2,6 +2,7 @@
 
 import logging
 import subprocess
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import IO, Any, Protocol
@@ -51,6 +52,10 @@ class Orchestrator:
         self.imports = imports
         self.read_files = read_files
         self.num_workers = num_workers
+
+        # Process tracking for cleanup
+        self._processes: list[subprocess.Popen[str]] = []
+        self._process_lock = threading.Lock()
 
         # Validate arguments
         if imports and read_files:
@@ -207,6 +212,10 @@ class Orchestrator:
             cwd=self.root_path,
         )
 
+        # Track process for cleanup
+        with self._process_lock:
+            self._processes.append(process)
+
         return process
 
     def _process_file(self, file_path: str) -> None:
@@ -222,13 +231,19 @@ class Orchestrator:
             RuntimeError: If subprocess fails
         """
         process = self._spawn_lean_subprocess(file_path)
-        self._process_subprocess_output(process)
+        try:
+            self._process_subprocess_output(process)
 
-        returncode = process.wait()
-        if returncode != 0:
-            raise RuntimeError(
-                f"Lean subprocess failed with exit code {returncode}\nFile: {file_path}"
-            )
+            returncode = process.wait()
+            if returncode != 0:
+                raise RuntimeError(
+                    f"Lean subprocess failed with exit code {returncode}\nFile: {file_path}"
+                )
+        finally:
+            # Remove from tracking after completion
+            with self._process_lock:
+                if process in self._processes:
+                    self._processes.remove(process)
 
     def _normalize_read_paths(self, read_files: list[str]) -> list[str]:
         """
@@ -263,3 +278,24 @@ class Orchestrator:
 
         for record in stream_json_lines(process.stdout):
             self.writer.add_record(record)
+
+    def cleanup(self) -> None:
+        """Terminate all running subprocesses for graceful shutdown."""
+        with self._process_lock:
+            processes = list(self._processes)
+
+        if not processes:
+            return
+
+        # Send SIGTERM to all running processes
+        for process in processes:
+            if process.poll() is None:  # Still running
+                process.terminate()
+
+        # Wait for graceful termination, then force kill if needed
+        for process in processes:
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
