@@ -26,10 +26,10 @@ public unsafe def tactics : DataExtractor where
     (fun _ _ _ => return true) fun ctxInfo info _ _ => ctxInfo.runMetaM' {} do
       let .ofTacticInfo info := info | return
       let some (.original ..) := info.stx.getHeadInfo? | return
-      if tacFilter.contains info.stx.getKind then return
+      let kind := info.stx.getKind
+      if tacFilter.contains kind then return
       let ppTac : String := toString info.stx.prettyPrint
       let elaborator := info.elaborator
-      let kind := toString info.stx.getKind
       let goals : List Json ← info.goalsBefore.mapM fun mvarId =>
         mvarId.withContext do
           let goal ← Lean.Meta.ppGoal mvarId
