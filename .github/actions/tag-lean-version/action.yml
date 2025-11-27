@@ -1,0 +1,40 @@
+name: 'Tag Lean Version'
+description: 'Extract version from lean-toolchain and create/update git tag'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Extract version from lean-toolchain
+      id: extract_version
+      shell: bash
+      run: |
+        # Read the lean-toolchain file and extract the version
+        TOOLCHAIN=$(cat lean-toolchain)
+        # Extract version (e.g., v4.26.0-rc2 from leanprover/lean4:v4.26.0-rc2)
+        VERSION=$(echo "$TOOLCHAIN" | sed -n 's/^leanprover\/lean4:\(v[0-9.]*.*\)$/\1/p' | tr -d '[:space:]')
+
+        if [ -z "$VERSION" ]; then
+          echo "Error: Could not extract version from lean-toolchain"
+          exit 1
+        fi
+
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Extracted version: $VERSION"
+
+    - name: Create or update tag
+      shell: bash
+      env:
+        VERSION: ${{ steps.extract_version.outputs.version }}
+      run: |
+        # Configure git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Create the tag at the current commit (HEAD)
+        # Use -f to force update if tag already exists
+        git tag -f "$VERSION" HEAD
+
+        # Push the tag, using --force to update if it already exists
+        git push origin "$VERSION" --force
+
+        echo "Successfully created/updated tag: $VERSION"
