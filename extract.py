@@ -44,8 +44,8 @@ path = "{ROOT.as_posix()}"
 
 [[require]]
 name = "lean_scout"
-git = "git@github.com:mathlib-initiative/lean_scout.git"
-rev = "main"
+git = "https://github.com/mathlib-initiative/lean_scout.git"
+rev = "{LEAN_VERSION}"
 """
 
 
