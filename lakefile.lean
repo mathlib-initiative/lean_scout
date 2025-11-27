@@ -31,12 +31,15 @@ script scout (args) := do
   let some scout := workspace.findPackage? `lean_scout |
     throw <| .userError "Failed to find lean_scout dependency"
   let rootPath : System.FilePath ← IO.FS.realPath workspace.root.rootDir
+  let hasCmdRoot := args.any (· == "--cmdRoot")
+  let cmdRootArgs ← if hasCmdRoot then
+    pure #[]
+  else do
+    let cmdRoot ← IO.currentDir
+    pure #["--cmdRoot", cmdRoot.toString]
   let child ← IO.Process.spawn {
     cmd := "uv"
     cwd := scout.rootDir
-    args := #[
-      "run",
-      "lean-scout",
-      "--rootPath", rootPath.toString] ++ args.toArray
+    args := #["run", "lean-scout", "--rootPath", rootPath.toString] ++ cmdRootArgs ++ args.toArray
   }
   child.wait
