@@ -123,12 +123,12 @@ def test_tactics_dataset_record_schema(tactics_dataset):
     assert 'ppTac' in first_record
     assert 'goals' in first_record
     assert 'elaborator' in first_record
-    assert 'name' in first_record
+    assert 'kind' in first_record
 
     assert isinstance(first_record['ppTac'], str)
     assert isinstance(first_record['goals'], list)
     assert isinstance(first_record['elaborator'], str)
-    assert first_record['name'] is None or isinstance(first_record['name'], str)
+    assert isinstance(first_record['kind'], str)
 
 
 def test_tactics_induction(tactics_dataset):
@@ -240,6 +240,7 @@ def test_tactics_jsonl_output_format(tactics_jsonl_records):
     for record in tactics_jsonl_records:
         assert "ppTac" in record, "Tactic record should have 'ppTac' field"
         assert "goals" in record, "Tactic record should have 'goals' field"
+        assert "kind" in record, "Tactic record should have 'kind' field"
 
 
 def test_tactics_jsonl_has_expected_tactics(tactics_jsonl_records):
@@ -267,4 +268,3 @@ def test_tactics_jsonl_no_output_directory_created():
 
         tactics_dir = data_dir / "tactics"
         assert not tactics_dir.exists(), "--jsonl should not create output directory"
-

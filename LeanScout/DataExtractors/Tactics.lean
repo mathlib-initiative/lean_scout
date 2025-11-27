@@ -29,6 +29,7 @@ public unsafe def tactics : DataExtractor where
       if tacFilter.contains info.stx.getKind then return
       let ppTac : String := toString info.stx.prettyPrint
       let elaborator := info.elaborator
+      let kind := toString info.stx.getKind
       let goals : List Json ← info.goalsBefore.mapM fun mvarId =>
         mvarId.withContext do
           let goal ← Lean.Meta.ppGoal mvarId
@@ -42,7 +43,7 @@ public unsafe def tactics : DataExtractor where
         goals : $(goals),
         ppTac : $(ppTac),
         elaborator : $(elaborator),
-        kind : $(info.stx.getKind)
+        kind : $(kind)
       }
   | _ => throw <| .userError "Unsupported Target"
 

@@ -104,7 +104,7 @@ lake run scout --command types --imports Lean
 - `type` (string): Type signature
 
 ### `tactics`
-Extracts tactic invocations with goal states, used constants, elaborator info, and syntax names.
+Extracts tactic invocations with goal states, used constants, elaborator info, and syntax kinds.
 
 **Supported modes**: `--read`, `--readList`, `--library`
 
@@ -119,7 +119,7 @@ lake run scout --command tactics --library LeanScoutTest --parallel 4
   - `usedConstants` (list of strings): Constants referenced in the goal
 - `ppTac` (string): Pretty-printed tactic syntax
 - `elaborator` (string): Name of the elaborator that produced this tactic
-- `name` (string, nullable): Syntax node name if available
+- `kind` (string): Non-null syntax node kind for the tactic
 
 ### List all extractors
 ```bash

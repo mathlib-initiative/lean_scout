@@ -28,6 +28,7 @@ def test_tactics_schema_structure():
 
     field_names = [f["name"] for f in schema["fields"]]
     assert "ppTac" in field_names
+    assert "kind" in field_names
 
 
 def test_tactics_schema_deserialization():
