@@ -38,8 +38,12 @@ def tacFilter : Lean.SyntaxNodeKinds := [
   `Lean.Parser.Tactic.tacticSeq1Indented,
   `Lean.Parser.Tactic.withAnnotateState,
   `Lean.cdotTk,
+  `Lean.cdot,
+  `ident,
   `«by»,
   `«;»,
+  `«<;>»,
+  `«{»,
   `«]»,
   Lean.nullKind,
 ]

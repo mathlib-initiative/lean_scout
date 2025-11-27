@@ -316,19 +316,19 @@ Examples:
     writer: Writer | None = None
     interrupted = False
 
-    def sigint_handler(signum: int, frame: FrameType | None) -> None:
-        """Handle SIGINT by cleaning up processes immediately."""
+    def sigint_handler(_signum: int, _frame: FrameType | None) -> None:
+        """Handle SIGINT by triggering cleanup via sys.exit."""
         nonlocal interrupted
         if interrupted:
-            # Second CTRL-C: force exit
-            sys.exit(130)
+            # Second interrupt - force exit immediately
+            logger.warning("Force exit requested.")
+            os._exit(130)
         interrupted = True
         logger.warning("Interrupted by user. Cleaning up...")
+        # Set shutdown flag immediately to prevent new process spawning
         if orchestrator is not None:
-            orchestrator.cleanup()
-        if writer is not None:
-            writer.close()
-        sys.exit(130)
+            orchestrator._shutdown = True
+        sys.exit(130)  # Triggers finally block for cleanup
 
     # Install signal handler for immediate cleanup on CTRL-C
     original_sigint = signal.signal(signal.SIGINT, sigint_handler)
