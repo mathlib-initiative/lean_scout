@@ -1,5 +1,6 @@
 """Orchestrates Lean subprocess execution and coordinates data writing."""
 
+import contextlib
 import logging
 import os
 import signal
@@ -294,20 +295,14 @@ class Orchestrator:
         # Send SIGTERM to all process groups (kills lake and its children)
         for process in processes:
             if process.poll() is None:  # Still running
-                try:
+                with contextlib.suppress(ProcessLookupError, PermissionError):
                     os.killpg(process.pid, signal.SIGTERM)
-                except (ProcessLookupError, PermissionError):
-                    # Process or group already gone
-                    pass
 
         # Wait for graceful termination, then force kill if needed
         for process in processes:
             try:
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
-                try:
+                with contextlib.suppress(ProcessLookupError, PermissionError):
                     os.killpg(process.pid, signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    # Process or group already gone
-                    pass
                 process.wait()
