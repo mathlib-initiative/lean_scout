@@ -1,4 +1,4 @@
-name: Lean Action CI
+name: Lint/test and tag on main
 
 on:
   push:
