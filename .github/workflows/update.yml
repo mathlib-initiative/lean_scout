@@ -18,5 +18,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
       - name: Update Lean project
         uses: leanprover-community/lean-update@main
