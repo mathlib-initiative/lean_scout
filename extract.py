@@ -8,8 +8,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-CALLER_ROOT = Path.cwd().resolve()
+ROOT = Path.cwd().resolve()
+CALLER_ROOT = ROOT
 MANIFEST_PATH = ROOT / "lake-manifest.json"
 LEAN_TOOLCHAIN_FILE = ROOT / "lean-toolchain"
 

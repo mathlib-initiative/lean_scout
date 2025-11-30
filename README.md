@@ -1,12 +1,21 @@
 # Lean Scout
 
-Lean Scout is a tool for creating datasets from Lean projects. 
+Lean Scout is a tool for creating datasets from Lean projects.
 
 ## Requirements
 
 To use this tool, you must have:
 - A basic Lean4 installation, including `elan`, `lake`, and `lean`. We currently support `leanprover/lean4:v4.26.0-rc2`.
 - The `uv` Python package manager.
+
+## Quickstart
+
+From the root of a Lean4 project that includes `lean_scout`, you can stream the wrapper and run it against one of your libraries (here, `MyLibrary`):
+```bash
+curl -fsSL https://raw.githubusercontent.com/mathlib-initiative/lean_scout/main/extract.py | python3 - --command tactics --library MyLibrary
+```
+Swap the flags after the script path for any `lean-scout` invocation (e.g., `--read`, `--imports`, `--dataDir`, shard counts). The wrapper reads `lake-manifest.json` and `lean-toolchain` from your current working directory and passes that directory as `--cmdRoot`, so it must be invoked from a Lean4 project root. 
+It creates a temporary Lean project with LeanScout and your project as dependencies and runs the LeanScout CLI from there with the appropriate `--cmdRoot`.
 
 ## Basic usage
 
@@ -59,7 +68,7 @@ If the extraction exits because of an error, Lean Scout removes the partially wr
 The flag `--jsonl` can be used to extract data directly to stdout.
 Parquet files will not be written if using `--jsonl`.
 
-**Note: logging information is sent to stderr.
+**Note**: logging information is sent to stderr.
 
 ## Extraction Modes
 
@@ -161,7 +170,7 @@ dataset = load_dataset("parquet", data_dir="types", split="train")
 1. Python orchestrates one or more Lean subprocess(es) that extract data and output JSON lines to stdout
 2. The Python orchestrator reads JSON from each subprocess and writes to a shared pool of Parquet writers, or to stdout in the case of `--jsonl`.
 
-The main python cli is written in `src/cli.py`.
+The main Python CLI is written in `src/lean_scout/cli.py`.
 
 # Testing
 
