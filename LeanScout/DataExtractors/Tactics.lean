@@ -21,8 +21,8 @@ public unsafe def tactics : DataExtractor where
     { name := "kind", nullable := false, type := .string },
   ]
   key := "ppTac"
-  go writer
-  | .input tgt => discard <| tgt.withVisitM (α := Unit) (ctx? := none)
+  go writer opts
+  | .input tgt => discard <| tgt.withVisitM opts (α := Unit) (ctx? := none)
     (fun _ _ _ => return true) fun ctxInfo info _ _ => ctxInfo.runMetaM' {} do
       let .ofTacticInfo info := info | return
       let some (.original ..) := info.stx.getHeadInfo? | return

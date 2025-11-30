@@ -32,13 +32,10 @@ deriving BEq
 
 open Lean
 
-structure BaseTarget where
-  opts : Options
-
-structure ImportsTarget extends BaseTarget where
+structure ImportsTarget where
   imports : Array Import
 
-structure InputTarget extends BaseTarget where
+structure InputTarget where
   path : System.FilePath
 
 inductive Target where
@@ -79,6 +76,6 @@ See `LeanScout.DataExtractors.types` for an example.
 structure DataExtractor where
   schema : Schema
   key : String
-  go : Writer → Target → IO Unit
+  go : Writer → Options → Target → IO Unit
 
 end LeanScout

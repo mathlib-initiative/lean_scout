@@ -15,7 +15,12 @@ lean_lib LeanScoutTest
 lean_lib LeanScout
 
 @[default_target]
-lean_exe lean_scout where
+lean_exe extract where
+  root := `Extract
+  supportInterpreter := true
+
+@[default_target]
+lean_exe run_scout where
   root := `Main
   supportInterpreter := true
 
