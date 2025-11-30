@@ -66,7 +66,7 @@ def main : M UInt32 := do
   -- Run the extractor and write JSON lines to stdout
   let tgt ← getTarget
   let stdout ← IO.getStdout
-  extractor.go (fun j => stdout.putStrLn j.compress) tgt
+  extractor.go ⟨(fun j => stdout.putStrLn j.compress)⟩ tgt
   return 0
 
 end LeanScout.CLI

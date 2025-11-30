@@ -45,6 +45,10 @@ inductive Target where
   | imports (imports : ImportsTarget)
   | input (input : InputTarget)
 
+/-- Placeholder for writer type -/
+structure Writer where
+  sink : Json → IO Unit
+
 /--
 A `DataExtractor` bundles together the following data:
 1. The schema `schema : Schema` of the data being generated.
@@ -75,6 +79,6 @@ See `LeanScout.DataExtractors.types` for an example.
 structure DataExtractor where
   schema : Schema
   key : String
-  go : (Json → IO Unit) → Target → IO Unit
+  go : Writer → Target → IO Unit
 
 end LeanScout
