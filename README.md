@@ -5,21 +5,21 @@ Lean Scout is a tool for creating datasets from Lean projects.
 ## Requirements
 
 To use this tool, you must have:
-- A basic Lean4 installation, including `elan`, `lake`, and `lean`. We currently support `leanprover/lean4:v4.26.0-rc1`.
-- Python 3.13+ and the `uv` Python package manager.
+- A basic Lean4 installation, including `elan`, `lake`, and `lean`. We currently support `leanprover/lean4:v4.26.0-rc2`.
+- The `uv` Python package manager.
 
 ## Basic usage
 
 To use Lean Scout, add this repo as a dependency in your Lean4 project.
 
-### Extract from imports (single subprocess)
+### Extract from imports
 ```bash
 lake run scout --command types --imports Lean
 ```
 
 This will run the `types` command to extract types of constants from an environment created by importing the `Lean` module.
 
-### Extract from files (parallel subprocesses)
+### Extract from files
 ```bash
 # Single file
 lake run scout --command tactics --read MyFile.lean
@@ -54,6 +54,13 @@ By default Lean Scout resolves both outputs and relative read targets from the d
 If you stop an extraction early (for example with `Ctrl+C`), Lean Scout leaves the partially written Parquet directory on disk; rerunning with the same `--command` and `--dataDir` will fail with a "Data directory … already exists" error. Remove the previous output directory or point `--dataDir` to a fresh location before retrying.
 If the extraction exits because of an error, Lean Scout removes the partially written directory for you; manual cleanup is only required when you interrupt the run yourself.
 
+### JSON lines
+
+The flag `--jsonl` can be used to extract data directly to stdout.
+Parquet files will not be written if using `--jsonl`.
+
+**Note: logging information is sent to stderr.
+
 ## Extraction Modes
 
 Lean Scout supports multiple extraction modes:
@@ -87,6 +94,8 @@ lake run scout --command types --numShards 32 --imports Lean
 ```
 
 ## Available Data Extractors
+
+We provide two built-in data extractors: `types` and `tactics`.
 
 ### `types`
 Extracts constant declarations with their types and modules.
@@ -149,73 +158,12 @@ dataset = load_dataset("parquet", data_dir="types", split="train")
 
 # How does LeanScout work?
 
-At a high level, LeanScout uses a **Python-first architecture**:
 1. Python orchestrates one or more Lean subprocess(es) that extract data and output JSON lines to stdout
-2. The Python orchestrator reads JSON from each subprocess and writes to a shared pool of Parquet writers
-3. This design enables **parallel extraction** where multiple Lean processes can run simultaneously while sharing efficient Parquet writers
+2. The Python orchestrator reads JSON from each subprocess and writes to a shared pool of Parquet writers, or to stdout in the case of `--jsonl`.
 
-The data is written to disk organized as sharded Parquet files for efficient storage and loading. 
-
-# Creating Custom Data Extractors
-
-You can extend Lean Scout by creating custom data extractors. An extractor is defined as:
-
-```lean
-structure DataExtractor where
-  schema : Schema
-  key : String
-  go : (Json → IO Unit) → Target → IO Unit
-```
-
-Where:
-- `schema`: An Arrow-compatible schema defining the output structure. Serialized to JSON and queried by the Python orchestrator before extraction begins.
-- `key`: The field name used to compute the shard ID (via BLAKE2b hashing) for distributing data across shards.
-- `go`: The main extraction function that:
-  - Takes a `sink` function (`Json → IO Unit`) for writing JSON records
-  - Takes a `Target` specifying what to extract from (`.imports` or `.input`)
-  - Extracts data and writes JSON records by calling the sink function
-
-### Example: Creating a Custom Extractor
-
-Create a file `LeanScout/DataExtractors/MyExtractor.lean`:
-
-```lean
-import LeanScout
-
-@[data_extractor mycommand]
-public unsafe def myExtractor : DataExtractor where
-  schema := .mk [
-    { name := "id", nullable := false, type := .string },
-    { name := "data", nullable := true, type := .string }
-  ]
-  key := "id"
-  go sink
-  | .imports tgt => tgt.runCoreM <| Meta.MetaM.run' do
-    -- Extract from the imported environment
-    sink <| json% { id : "example", data : "some data" }
-  | .input tgt =>
-    -- Extract from a specific file
-    throw <| .userError "Unsupported Target"
-```
-
-Then import it in `LeanScout/DataExtractors.lean`:
-```lean
-import LeanScout.DataExtractors.MyExtractor
-```
-
-Rebuild and use:
-```bash
-lake build
-lake run scout --command mycommand --imports Lean
-```
-
-### Registration
-
-Extractors use the `@[data_extractor cmd]` attribute for automatic registration. The attribute system maintains a `HashMap` of command names to extractor implementations, which is queried at runtime by the main CLI in `Main.lean`.
+The main python cli is written in `src/cli.py`.
 
 # Testing
-
-Lean Scout has a comprehensive three-phase test suite:
 
 ### Running Tests
 
@@ -224,32 +172,7 @@ Lean Scout has a comprehensive three-phase test suite:
 ./run_tests
 
 # Run individual phases
-lake test                          # Phase 0: Lean schema tests only
+lake test                         # Phase 0: Lean schema tests only
 uv run pytest test/internals/ -v  # Phase 1: Infrastructure tests only
 uv run pytest test/extractors/ -v # Phase 2: Extractor tests only
 ```
-
-### Test Architecture
-
-**Phase 0: Lean Schema Tests** (`lake test`)
-- Tests schema serialization/deserialization roundtrip in Lean
-- Located in `LeanScoutTest.lean`
-- Uses `#guard_msgs` to verify schema JSON format
-- Ensures Lean schemas can be correctly parsed by Python
-
-**Phase 1: Infrastructure Tests** (`test/internals/`)
-- Tests Python infrastructure without extracting Lean data
-- Focus: Schema querying, writer logic, orchestrator, CLI utilities
-- 34 tests using real subprocess calls (no mocking)
-- Fast execution (no Lean data extraction)
-- Files: `test_schema.py`, `test_writer.py`, `test_orchestrator.py`, `test_cli.py`
-
-**Phase 2: Data Extractor Tests** (`test/extractors/`)
-- Tests data extractors using `test_project` as a dependency
-- Focus: Verifying extractors produce correct output
-- Uses YAML specifications for expected outputs (`test/fixtures/*.yaml`)
-- Tests Scout when used as a dependency (real-world usage)
-- Verifies schema structure, goal formatting, and parallel extraction
-- Files: `test_types.py` (types extractor), `test_tactics.py` (tactics extractor)
-
-The complete test suite ensures all components work correctly at every level: Lean schema validation, Python infrastructure, and end-to-end extraction.
