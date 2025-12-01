@@ -1,6 +1,8 @@
 module
 
 public import Lean
+public import Std.Time.Zoned
+public import Std.Time.Format
 
 public section
 
@@ -77,5 +79,28 @@ structure DataExtractor where
   schema : Schema
   key : String
   go : Writer → Options → Target → IO Unit
+
+inductive Severity where
+  | debug
+  | info
+  | warning
+  | error
+deriving Ord
+
+instance : ToString Severity where toString
+  | .debug => "DEBUG"
+  | .info  => "INFO"
+  | .warning => "WARNING"
+  | .error => "ERROR"
+
+structure Logger where
+  log : Severity → String → IO Unit
+
+def logger : Logger where
+  log s msg := do
+    let t ← Std.Time.DateTime.now (tz := Std.Time.TimeZone.GMT)
+    let stderr ← IO.getStderr
+    stderr.putStrLn s!"{t} [{s}] {msg}"
+    stderr.flush
 
 end LeanScout

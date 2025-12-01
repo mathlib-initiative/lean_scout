@@ -80,8 +80,8 @@ class Orchestrator:
         Returns:
             Dictionary with statistics: total_rows, num_shards, etc.
         """
-        # Build lean_scout first so subprocesses don't need to build it
-        self._build_lean_scout()
+        # Build extract first so subprocesses don't need to build it
+        self._build_extract()
 
         if self.imports:
             self._run_imports()
@@ -97,21 +97,21 @@ class Orchestrator:
 
         return self.writer.close()
 
-    def _build_lean_scout(self) -> None:
-        """Build lean_scout executable before spawning subprocesses."""
-        logger.info("Building lean_scout...")
+    def _build_extract(self) -> None:
+        """Build extract executable before spawning subprocesses."""
+        logger.info("Building extract...")
         result = subprocess.run(
-            ["lake", "build", "-q", "lean_scout"],
+            ["lake", "build", "-q", "extract"],
             cwd=self.root_path,
             capture_output=True,
             text=True,
         )
         if result.returncode != 0:
             raise RuntimeError(
-                f"Failed to build lean_scout (exit code {result.returncode})\n"
+                f"Failed to build extract (exit code {result.returncode})\n"
                 f"stderr: {result.stderr}"
             )
-        logger.info("lean_scout build completed successfully")
+        logger.info("extract build completed successfully")
 
     def _run_imports(self) -> None:
         logger.info("Running single subprocess for imports target...")
@@ -192,7 +192,7 @@ class Orchestrator:
             "lake",
             "exe",
             "-q",
-            "lean_scout",
+            "extract",
             "--command",
             self.command,
         ]
