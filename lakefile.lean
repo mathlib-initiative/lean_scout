@@ -15,13 +15,8 @@ lean_lib LeanScoutTest
 lean_lib LeanScout
 
 @[default_target]
-lean_exe extract where
-  root := `Extract
-  supportInterpreter := true
-
-@[default_target]
-lean_exe run_scout where
-  root := `Main
+lean_exe lean_scout_extractor where
+  root := `Extractor
   supportInterpreter := true
 
 library_facet module_paths (lib) : Array System.FilePath := do

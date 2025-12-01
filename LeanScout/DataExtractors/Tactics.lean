@@ -21,7 +21,7 @@ public unsafe def tactics : DataExtractor where
     { name := "kind", nullable := false, type := .string },
   ]
   key := "ppTac"
-  go writer opts
+  go sink opts
   | .input tgt => discard <| tgt.withVisitM opts (α := Unit) (ctx? := none)
     (fun _ _ _ => return true) fun ctxInfo info _ _ => ctxInfo.runMetaM' {} do
       let .ofTacticInfo info := info | return
@@ -39,7 +39,7 @@ public unsafe def tactics : DataExtractor where
             pp : $(toString goal),
             usedConstants : $(consts.toList.map fun nm => s!"{nm}")
           }
-      writer.sink <| json% {
+      sink <| json% {
         goals : $(goals),
         ppTac : $(ppTac),
         elaborator : $(elaborator),

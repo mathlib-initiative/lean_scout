@@ -5,7 +5,7 @@ public import Lean
 namespace LeanScout
 
 partial
-def subprocessLines (go : String → IO Unit) (cmd : String) (args : Array String) :
+def subprocessLines (cmd : String) (args : Array String) (go : String → IO Unit) :
     IO (Task <| Except IO.Error UInt32) := do
   let child ← IO.Process.spawn {
     cmd := cmd

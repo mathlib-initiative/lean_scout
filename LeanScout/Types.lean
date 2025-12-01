@@ -36,16 +36,19 @@ open Lean
 
 structure ImportsTarget where
   imports : Array Import
+deriving ToJson, FromJson
 
 structure InputTarget where
   path : System.FilePath
+deriving ToJson, FromJson
 
 inductive Target where
   | imports (imports : ImportsTarget)
   | input (input : InputTarget)
+deriving ToJson, FromJson
 
-/-- Placeholder for writer type -/
-structure Writer where
+/-- A data writer -/
+structure DataWriter where
   sink : Json → IO Unit
 
 /--
@@ -78,7 +81,7 @@ See `LeanScout.DataExtractors.types` for an example.
 structure DataExtractor where
   schema : Schema
   key : String
-  go : Writer → Options → Target → IO Unit
+  go : (Json → IO Unit) → Options → Target → IO Unit
 
 inductive Severity where
   | debug

@@ -2,12 +2,37 @@ module
 
 public import LeanScout
 
-namespace LeanScout.CLI
+namespace LeanScout
 
 open Lean
 
-abbrev Command := String
+structure ExtractorConfig where
+  target : Target
+  command : Command
+deriving ToJson, FromJson
 
+unsafe
+def extract (cfg : ExtractorConfig): IO UInt32 := do
+  let some extractor := (data_extractors).get? cfg.command
+    | logger.log .error s!"Failed to find extractor {cfg.command}" ; return 1
+  let stdout ← IO.getStdout
+  let sink (j : Json) : IO Unit := do
+    stdout.putStrLn j.compress
+    stdout.flush
+  extractor.go sink {} cfg.target
+  return 0
+
+end LeanScout
+
+public unsafe def main (args : List String) : IO UInt32 := do
+  let [arg] := args | LeanScout.logger.log .error s!"" ; return 1
+  match Lean.Json.parse arg with
+  | .ok arg => match Lean.fromJson? (α := LeanScout.ExtractorConfig) arg with
+    | .ok cfg => LeanScout.extract cfg
+    | .error e => LeanScout.logger.log .error s!"Failed to parse extractor config: {e}" ; return 1
+  | .error e => LeanScout.logger.log .error s!"Failed to parse JSON: {e}" ; return 1
+
+/-
 structure Options where
   target : Option Target := none
   command : Option Command := none
@@ -75,3 +100,4 @@ open LeanScout
 
 public unsafe def main (args : List String) := do
   LeanScout.CLI.run args LeanScout.CLI.main
+-/
