@@ -36,7 +36,7 @@ def TargetSpec.toTargets : TargetSpec → IO (Array Target)
     let lines := output.stdout.splitOn "\n" |>.filter (·.trim ≠ "")
     return lines.toArray.map fun s => .read <| System.FilePath.mk s
 
-#eval discard <| TargetSpec.toTargets (.library `LeanScout)
+-- #eval discard <| TargetSpec.toTargets (.library `LeanScout)
 
 def run (cfg : Config) : IO UInt32 := do
   let some cmd := cfg.command
@@ -50,15 +50,26 @@ def run (cfg : Config) : IO UInt32 := do
     let stdout ← get
     stdout.putStrLn s
     stdout.flush
-  let mut taskPool : Array (Task <| Except IO.Error UInt32) := #[]
+  let mut taskPool : Std.HashMap Nat (Task <| Except IO.Error UInt32) := {}
   for cfg in cfgs do
     let cfg := Lean.toJson cfg |>.compress
     let args : Array String := #[
       "exe", "-q", "lean_scout_extractor", cfg
     ]
     let task ← subprocessLines "lake" args write
-    logger.log .info s!"Started extractor task with config {cfg}"
-    taskPool := taskPool.push task
+    let idx := taskPool.size
+    logger.log .info s!"Started extractor task {idx} with config {cfg}"
+    taskPool := taskPool.insert idx task
+  let mut results : Std.HashMap Nat (Except IO.Error UInt32) := {}
+  while !(taskPool.isEmpty) do
+    for (idx, task) in taskPool do
+      if ← IO.hasFinished task then
+        let res ← IO.wait task
+        match res with
+        | .ok code => logger.log .info s!"Extractor task {idx} finished with exit code {code}"
+        | .error err => logger.log .error s!"Extractor task {idx} failed with error: {err}"
+        results := results.insert idx res
+        taskPool := taskPool.erase idx
   return 0
 
 end Orchestrator
