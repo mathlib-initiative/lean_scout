@@ -130,6 +130,7 @@ jsonlWriter : IO Writer := return {
 
 parquetWriter (scoutDir : System.FilePath) (cfg : Config) (extractor : DataExtractor) : IO Writer := do
   let dataDir := match cfg.dataDir with | some dataDir => dataDir | none => System.FilePath.mk "./data"
+  IO.FS.createDirAll dataDir
   let dataDir ← IO.FS.realPath dataDir
   let subprocess ← IO.Process.spawn {
     cwd := scoutDir
