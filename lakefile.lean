@@ -19,6 +19,11 @@ lean_exe lean_scout_extractor where
   root := `Extractor
   supportInterpreter := true
 
+@[default_target]
+lean_exe lean_scout where
+  root := `Main
+  supportInterpreter := true
+
 library_facet module_paths (lib) : Array System.FilePath := do
   let modules ← (← lib.modules.fetch).await
   let mut out := #[]
