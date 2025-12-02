@@ -13,15 +13,18 @@ inductive TargetSpec where
   | read (path : System.FilePath)
   | library (name : Name)
 
+inductive WriterSpec where
+  | parquet
+  | jsonl
+
 structure Config where
   scoutDir : Option System.FilePath := none
   command : Option Command := none
   targetSpec : Option TargetSpec := none
   dataDir : Option System.FilePath := none
-  numShards : Option Nat := none
-  batchRows : Option Nat := none
-  parquet : Option Unit := none
-  jsonl : Option Unit := none
+  writerSpec : Option WriterSpec := none
+  numShards : Nat := 128
+  batchRows : Nat := 1024
   parallel : Nat := 1
 
 def Config.processArgs (cfg : Config) (args : List String) : Config :=
@@ -31,10 +34,12 @@ def Config.processArgs (cfg : Config) (args : List String) : Config :=
   | "--scoutDir" :: path :: args => { cfg with scoutDir := some <| System.FilePath.mk path }.processArgs args
   | "--command" :: command :: args => { cfg with command := command.toName }.processArgs args
   | "--dataDir" :: path :: args => { cfg with dataDir := some <| System.FilePath.mk path }.processArgs args
-  | "--numShards" :: n :: args => { cfg with numShards := n.toNat? }.processArgs args
-  | "--batchRows" :: n :: args => { cfg with batchRows := n.toNat? }.processArgs args
-  | "--parquet" :: args => { cfg with parquet := some () }.processArgs args
-  | "--jsonl" :: args => { cfg with jsonl := some () }.processArgs args
+  | "--numShards" :: n :: args =>
+    match n.toNat? with | some n => { cfg with numShards := n }.processArgs args | none => cfg.processArgs args
+  | "--batchRows" :: n :: args =>
+    match n.toNat? with | some n => { cfg with batchRows := n }.processArgs args | none => cfg.processArgs args
+  | "--parquet" :: args => { cfg with writerSpec := some .parquet }.processArgs args
+  | "--jsonl" :: args => { cfg with writerSpec := some .jsonl }.processArgs args
   | "--imports" :: importsList => { cfg with targetSpec := some <| .imports <| importsList.toArray }
   | "--read" :: [path] => { cfg with targetSpec := some <| .read <| System.FilePath.mk path }
   | "--library" :: [name] => { cfg with targetSpec := some <| .library <| name.toName }
@@ -63,27 +68,17 @@ def run (cfg : Config) : IO UInt32 := do
     | LeanScout.logger.log .error "No target specified in config" ; return 1
   let some scoutDir := cfg.scoutDir
     | LeanScout.logger.log .error "No scout directory specified in config" ; return 1
+  let some writerSpec := cfg.writerSpec
+    | LeanScout.logger.log .error "No writer specified in config" ; return 1
 
   let cfgs : Array Extractor.Config := (← tgtSpec.toTargets).map fun tgt => ⟨cmd, tgt⟩
 
   let some extractor := (data_extractors).get? cmd
     | logger.log .error s!"No data extractor found for command '{cmd}'" ; return 1
 
-  let mut writerName : String := ""
-  match cfg.parquet, cfg.jsonl with
-  | none, none =>
-    logger.log .error "No output format specified (use --parquet or --jsonl)" ; return 1
-  | some _, none =>
-    writerName := "parquet"
-  | none, some _ =>
-    writerName := "jsonl"
-  | some _, some _ =>
-    logger.log .error "Cannot specify both --parquet and --jsonl" ; return 1
-
-  let writer : Std.Mutex Writer ← Std.Mutex.new <| ← match writerName with
-    | "jsonl" => jsonlWriter
-    | "parquet" => parquetWriter scoutDir cfg extractor
-    | _ => unreachable!
+  let writer : Std.Mutex Writer ← Std.Mutex.new <| ← match writerSpec with
+  | .jsonl => jsonlWriter
+  | .parquet => parquetWriter scoutDir cfg extractor
 
   let mut launches : Array (IO (Task <| Except IO.Error UInt32)) := #[]
   for cfg in cfgs do
@@ -135,15 +130,13 @@ parquetWriter (scoutDir : System.FilePath) (cfg : Config) (extractor : DataExtra
   let dataDir := match cfg.dataDir with | some dataDir => dataDir | none => System.FilePath.mk "./data"
   IO.FS.createDirAll dataDir
   let dataDir ← IO.FS.realPath dataDir
-  let batchRows := match cfg.batchRows with | some n => n | none => 1024
-  let numShards := match cfg.numShards with | some n => n | none => 128
   let subprocess ← IO.Process.spawn {
     cwd := scoutDir
     cmd := "uv"
     args := #["run", "parquet_writer",
       "--dataDir", dataDir.toString,
-      "--batchRows", toString batchRows,
-      "--numShards", toString numShards,
+      "--batchRows", toString cfg.batchRows,
+      "--numShards", toString cfg.numShards,
       "--key", extractor.key,
       "--schema", (toJson extractor.schema).compress]
     stdin := .piped
