@@ -62,6 +62,7 @@ def main() -> None:
         for record in stream_json_lines(sys.stdin):
             writer.add_record(record)
 
+        print("DONE")
         writer.close()
 
     except Exception as e:
