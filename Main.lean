@@ -133,12 +133,14 @@ parquetWriter (scoutDir : System.FilePath) (cfg : Config) (extractor : DataExtra
   IO.FS.createDirAll dataDir
   let dataDir ← IO.FS.realPath dataDir
   let batchRows := match cfg.batchRows with | some n => n | none => 1024
+  let numShards := match cfg.numShards with | some n => n | none => 128
   let subprocess ← IO.Process.spawn {
     cwd := scoutDir
     cmd := "uv"
     args := #["run", "parquet_writer",
       "--dataDir", dataDir.toString,
       "--batchRows", toString batchRows,
+      "--numShards", toString numShards,
       "--key", extractor.key,
       "--schema", (toJson extractor.schema).compress]
     stdin := .piped
