@@ -78,19 +78,28 @@ def run (cfg : Config) : IO UInt32 := do
     | "parquet" => parquetWriter cfg extractor
     | _ => unreachable!
 
-  let mut taskPool : Std.HashMap Nat (Task <| Except IO.Error UInt32) := {}
+  let mut launches : Array (IO (Task <| Except IO.Error UInt32)) := #[]
   for cfg in cfgs do
     let cfg := Lean.toJson cfg |>.compress
     let args : Array String := #[
       "exe", "-q", "lean_scout_extractor", cfg
     ]
-    let task ← subprocessLines "lake" args fun s => writer.atomically get >>= fun w => w.sink s
-    let idx := taskPool.size
-    logger.log .info s!"Started extractor task {idx} with config {cfg}"
-    taskPool := taskPool.insert idx task
+    let task := subprocessLines "lake" args fun s => writer.atomically get >>= fun w => w.sink s
+    launches := launches.push task
 
+  let mut taskPool : Std.HashMap Nat (Task <| Except IO.Error UInt32) := {}
+  let mut launchIdx := 0
   let mut results : Std.HashMap Nat (Except IO.Error UInt32) := {}
-  while !(taskPool.isEmpty) do
+
+  while launchIdx < launches.size || !taskPool.isEmpty do
+    -- Launch new tasks up to max concurrency of 8
+    while taskPool.size < 8 && launchIdx < launches.size do
+      let task ← launches[launchIdx]!
+      logger.log .info s!"Started extractor task {launchIdx}"
+      taskPool := taskPool.insert launchIdx task
+      launchIdx := launchIdx + 1
+
+    -- Check for completed tasks
     for (idx, task) in taskPool do
       if ← IO.hasFinished task then
         let res ← IO.wait task
@@ -99,6 +108,9 @@ def run (cfg : Config) : IO UInt32 := do
         | .error err => logger.log .error s!"Extractor task {idx} failed with error: {err}"
         results := results.insert idx res
         taskPool := taskPool.erase idx
+
+    -- Small sleep to avoid busy-waiting
+    IO.sleep 10
 
   writer.atomically <| get >>= fun w => w.wait
 
