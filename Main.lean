@@ -95,7 +95,7 @@ def run (cfg : Config) : IO UInt32 := do
 
   while launchIdx < launches.size || !taskPool.isEmpty do
     -- Launch new tasks up to max concurrency of 8
-    while taskPool.size < 8 && launchIdx < launches.size do
+    while taskPool.size < cfg.parallel && launchIdx < launches.size do
       let task ← launches[launchIdx]!
       logger.log .info s!"Started extractor task {launchIdx}"
       taskPool := taskPool.insert launchIdx task
