@@ -80,25 +80,26 @@ def run (cfg : Config) : IO UInt32 := do
   | .jsonl => jsonlWriter
   | .parquet => parquetWriter scoutDir cfg extractor
 
-  let mut launches : Array (IO (Task <| Except IO.Error UInt32)) := #[]
+  let mut launches : Array (String × IO (Task <| Except IO.Error UInt32)) := #[]
   for cfg in cfgs do
-    let cfg := Lean.toJson cfg |>.compress
+    let cfgArg := Lean.toJson cfg |>.compress
     let args : Array String := #[
-      "exe", "-q", "lean_scout_extractor", cfg
+      "exe", "-q", "lean_scout_extractor", cfgArg
     ]
     let task := subprocessLines "lake" args fun s => writer.atomically get >>= fun w => w.sink s
-    launches := launches.push task
+    launches := launches.push (cfgArg, task)
 
   let mut taskPool : Std.HashMap Nat (Task <| Except IO.Error UInt32) := {}
   let mut launchIdx := 0
   let mut results : Std.HashMap Nat (Except IO.Error UInt32) := {}
 
   while launchIdx < launches.size || !taskPool.isEmpty do
+
     -- Launch new tasks up to max concurrency of 8
     while taskPool.size < cfg.parallel && launchIdx < launches.size do
-      let task ← launches[launchIdx]!
-      logger.log .info s!"Started extractor task {launchIdx}"
-      taskPool := taskPool.insert launchIdx task
+      let (cfgArg, task) := launches[launchIdx]!
+      logger.log .info s!"Started extractor task {launchIdx} with config {cfgArg}"
+      taskPool := taskPool.insert launchIdx (← task)
       launchIdx := launchIdx + 1
 
     -- Check for completed tasks
