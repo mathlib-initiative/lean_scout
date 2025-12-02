@@ -62,8 +62,11 @@ def main() -> None:
         for record in stream_json_lines(sys.stdin):
             writer.add_record(record)
 
-        print("DONE", file=sys.stderr)
         writer.close()
+
+    except KeyboardInterrupt:
+        writer.close()
+        sys.exit(130)
 
     except Exception as e:
         writer.close()
