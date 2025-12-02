@@ -66,6 +66,7 @@ def main() -> None:
 
     except KeyboardInterrupt:
         writer.close()
+        print("DONE")
         sys.exit(130)
 
     except Exception as e:
