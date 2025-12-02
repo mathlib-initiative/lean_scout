@@ -16,10 +16,20 @@ inductive TargetSpec where
 structure Config where
   command : Option Command := none
   targetSpec : Option TargetSpec := none
+  dataDir : Option System.FilePath := none
+  numShards : Option Nat := none
+  batchRows : Option Nat := none
+  parquet : Option Unit := none
+  jsonl : Option Unit := none
 
 def Config.processArgs (cfg : Config) (args : List String) : Config :=
   match args with
   | "--command" :: command :: args => { cfg with command := command.toName }.processArgs args
+  | "--dataDir" :: path :: args => { cfg with dataDir := some <| System.FilePath.mk path }.processArgs args
+  | "--numShards" :: n :: args => { cfg with numShards := n.toNat? }.processArgs args
+  | "--batchRows" :: n :: args => { cfg with batchRows := n.toNat? }.processArgs args
+  | "--parquet" :: args => { cfg with parquet := some () }.processArgs args
+  | "--jsonl" :: args => { cfg with jsonl := some () }.processArgs args
   | "--imports" :: importsList => { cfg with targetSpec := some <| .imports <| importsList.toArray }
   | "--read" :: [path] => { cfg with targetSpec := some <| .read <| System.FilePath.mk path }
   | "--library" :: [name] => { cfg with targetSpec := some <| .library <| name.toName }
@@ -36,27 +46,41 @@ def TargetSpec.toTargets : TargetSpec → IO (Array Target)
     let lines := output.stdout.splitOn "\n" |>.filter (·.trim ≠ "")
     return lines.toArray.map fun s => .read <| System.FilePath.mk s
 
--- #eval discard <| TargetSpec.toTargets (.library `LeanScout)
+structure Writer where
+  kill : IO Unit
+  wait : IO UInt32
+  sink : String → IO Unit
 
+unsafe
 def run (cfg : Config) : IO UInt32 := do
   let some cmd := cfg.command
     | LeanScout.logger.log .error "No command specified in config" ; return 1
   let some tgtSpec := cfg.targetSpec
     | LeanScout.logger.log .error "No target specified in config" ; return 1
   let cfgs : Array Extractor.Config := (← tgtSpec.toTargets).map fun tgt => ⟨cmd, tgt⟩
-  let stdout ← IO.getStdout
-  let writer : Std.Mutex IO.FS.Stream ← Std.Mutex.new <| stdout
-  let write (s : String) : IO Unit := writer.atomically do
-    let stdout ← get
-    stdout.putStrLn s
-    stdout.flush
+  let mut writerName : String := ""
+  match cfg.parquet, cfg.jsonl with
+  | none, none =>
+    logger.log .error "No output format specified (use --parequet or --jsonl)" ; return 1
+  | some _, none =>
+    writerName := "parquet"
+  | none, some _ =>
+    writerName := "jsonl"
+  | some _, some _ =>
+    logger.log .error "Cannot specify both --parquet and --jsonl" ; return 1
+  let some extractor := (data_extractors).get? cmd
+    | logger.log .error s!"No data extractor found for command '{cmd}'" ; return 1
+  let writer : Std.Mutex Writer ← Std.Mutex.new <| ← match writerName with
+    | "jsonl" => jsonlWriter cfg extractor
+    | "parquet" => parquetWriter cfg extractor
+    | _ => unreachable!
   let mut taskPool : Std.HashMap Nat (Task <| Except IO.Error UInt32) := {}
   for cfg in cfgs do
     let cfg := Lean.toJson cfg |>.compress
     let args : Array String := #[
       "exe", "-q", "lean_scout_extractor", cfg
     ]
-    let task ← subprocessLines "lake" args write
+    let task ← subprocessLines "lake" args fun s => writer.atomically get >>= fun w => w.sink s
     let idx := taskPool.size
     logger.log .info s!"Started extractor task {idx} with config {cfg}"
     taskPool := taskPool.insert idx task
@@ -70,12 +94,40 @@ def run (cfg : Config) : IO UInt32 := do
         | .error err => logger.log .error s!"Extractor task {idx} failed with error: {err}"
         results := results.insert idx res
         taskPool := taskPool.erase idx
-  return 0
+  writer.atomically <| get >>= fun w => w.wait
+where
+jsonlWriter (cfg : Config) (extractor : DataExtractor) : IO Writer := return {
+  wait := return 0,
+  kill := return (),
+  sink := fun s => do
+    let stdout ← IO.getStdout
+    stdout.putStrLn s
+    stdout.flush
+}
+parquetWriter (cfg : Config) (extractor : DataExtractor) : IO Writer := do
+  let dataDir := match cfg.dataDir with | some dataDir => dataDir | none => System.FilePath.mk "./data"
+  let subprocess ← IO.Process.spawn {
+    cmd := "uv"
+    args := #["run", "parquet_writer", "--dataDir", dataDir.toString,
+      "--key", extractor.key, "--schema", (toJson extractor.schema).compress]
+    stdin := .piped
+  }
+  let (stdin, child) ← subprocess.takeStdin
+  return {
+    wait := do
+      stdin.putStrLn "DONE"
+      stdin.flush
+      child.wait
+    kill := child.kill,
+    sink := fun s => do
+      stdin.putStrLn s
+      stdin.flush
+  }
 
 end Orchestrator
 
 end LeanScout
 
-public def main (args : List String) : IO UInt32 := do
+public unsafe def main (args : List String) : IO UInt32 := do
   let cfg := LeanScout.Orchestrator.Config.processArgs {} args
   LeanScout.Orchestrator.run cfg

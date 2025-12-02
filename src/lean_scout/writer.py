@@ -9,44 +9,7 @@ from typing import Any, TextIO
 import pyarrow as pa  # type: ignore[import-untyped]
 import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
-logger = logging.getLogger(__name__)
-
-
-class Writer:
-    """Abstract base class for data writers."""
-
-    def add_record(self, record: dict[str, Any]) -> None:
-        """Add a record to the writer."""
-        raise NotImplementedError()
-
-    def close(self) -> dict[str, Any]:
-        """Close the writer and return statistics."""
-        raise NotImplementedError()
-
-
-class JsonLinesWriter(Writer):
-    """Writes records as JSON Lines to a stream (default: stdout)."""
-
-    def __init__(self, stream: TextIO | None = None) -> None:
-        self.stream = stream if stream is not None else sys.stdout
-        self.count = 0
-        self._lock = threading.Lock()
-
-    def add_record(self, record: dict[str, Any]) -> None:
-        """Add a record to the output stream."""
-        line = json.dumps(record, ensure_ascii=False)
-        with self._lock:
-            self.stream.write(line + "\n")
-            self.stream.flush()
-            self.count += 1
-
-    def close(self) -> dict[str, int]:
-        """Close the writer and return statistics."""
-        with self._lock:
-            return {"total_rows": self.count}
-
-
-class ShardedParquetWriter(Writer):
+class ShardedParquetWriter():
     """Manages sharded parquet file writing with batching."""
 
     def __init__(
@@ -111,13 +74,6 @@ class ShardedParquetWriter(Writer):
         table = pa.Table.from_pylist(records, schema=self.schema)
         self.writers[shard].write_table(table)
         self.counts[shard] += table.num_rows
-        logger.info(
-            "Wrote %s rows to shard %03d (%s total) at %s",
-            table.num_rows,
-            shard,
-            self.counts[shard],
-            self.paths[shard],
-        )
 
         records.clear()
 

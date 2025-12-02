@@ -47,10 +47,6 @@ inductive Target where
   | input (input : InputTarget)
 deriving ToJson, FromJson
 
-/-- A data writer -/
-structure DataWriter where
-  sink : Json → IO Unit
-
 /--
 A `DataExtractor` bundles together the following data:
 1. The schema `schema : Schema` of the data being generated.

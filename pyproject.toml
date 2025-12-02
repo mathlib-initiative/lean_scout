@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 lean-scout = "lean_scout.cli:main"
+parquet_writer = "lean_scout.parquet_writer_cli:main"
 
 [build-system]
 requires = ["hatchling"]

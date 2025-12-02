@@ -16,6 +16,8 @@ def stream_json_lines(input_stream: Iterable[str] | TextIO) -> Iterator[dict[str
         line = line.strip()
         if not line:
             continue
+        if line == "DONE":
+            return
         try:
             yield json.loads(line)
         except json.JSONDecodeError as e:
