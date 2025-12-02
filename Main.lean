@@ -14,6 +14,7 @@ inductive TargetSpec where
   | library (name : Name)
 
 structure Config where
+  scoutDir : Option System.FilePath := none
   command : Option Command := none
   targetSpec : Option TargetSpec := none
   dataDir : Option System.FilePath := none
@@ -24,6 +25,7 @@ structure Config where
 
 def Config.processArgs (cfg : Config) (args : List String) : Config :=
   match args with
+  | "--scoutDir" :: path :: args => { cfg with scoutDir := some <| System.FilePath.mk path }.processArgs args
   | "--command" :: command :: args => { cfg with command := command.toName }.processArgs args
   | "--dataDir" :: path :: args => { cfg with dataDir := some <| System.FilePath.mk path }.processArgs args
   | "--numShards" :: n :: args => { cfg with numShards := n.toNat? }.processArgs args
@@ -56,6 +58,8 @@ def run (cfg : Config) : IO UInt32 := do
     | LeanScout.logger.log .error "No command specified in config" ; return 1
   let some tgtSpec := cfg.targetSpec
     | LeanScout.logger.log .error "No target specified in config" ; return 1
+  let some scoutDir := cfg.scoutDir
+    | LeanScout.logger.log .error "No scout directory specified in config" ; return 1
 
   let cfgs : Array Extractor.Config := (← tgtSpec.toTargets).map fun tgt => ⟨cmd, tgt⟩
 
@@ -75,7 +79,7 @@ def run (cfg : Config) : IO UInt32 := do
 
   let writer : Std.Mutex Writer ← Std.Mutex.new <| ← match writerName with
     | "jsonl" => jsonlWriter
-    | "parquet" => parquetWriter cfg extractor
+    | "parquet" => parquetWriter scoutDir cfg extractor
     | _ => unreachable!
 
   let mut launches : Array (IO (Task <| Except IO.Error UInt32)) := #[]
@@ -124,9 +128,10 @@ jsonlWriter : IO Writer := return {
     stdout.flush
 }
 
-parquetWriter (cfg : Config) (extractor : DataExtractor) : IO Writer := do
+parquetWriter (scoutDir : System.FilePath) (cfg : Config) (extractor : DataExtractor) : IO Writer := do
   let dataDir := match cfg.dataDir with | some dataDir => dataDir | none => System.FilePath.mk "./data"
   let subprocess ← IO.Process.spawn {
+    cwd := scoutDir
     cmd := "uv"
     args := #["run", "parquet_writer", "--dataDir", dataDir.toString,
       "--key", extractor.key, "--schema", (toJson extractor.schema).compress]
