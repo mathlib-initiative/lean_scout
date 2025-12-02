@@ -7,3 +7,5 @@ public import LeanScout.Logger
 public import LeanScout.DataExtractors
 public import LeanScout.Types
 public import LeanScout.Schema
+public import LeanScout.Extractor
+public import LeanScout.Subprocess
