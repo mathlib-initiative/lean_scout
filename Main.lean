@@ -47,7 +47,6 @@ def TargetSpec.toTargets : TargetSpec → IO (Array Target)
     return lines.toArray.map fun s => .read <| System.FilePath.mk s
 
 structure Writer where
-  kill : IO Unit
   wait : IO UInt32
   sink : String → IO Unit
 
@@ -57,23 +56,28 @@ def run (cfg : Config) : IO UInt32 := do
     | LeanScout.logger.log .error "No command specified in config" ; return 1
   let some tgtSpec := cfg.targetSpec
     | LeanScout.logger.log .error "No target specified in config" ; return 1
+
   let cfgs : Array Extractor.Config := (← tgtSpec.toTargets).map fun tgt => ⟨cmd, tgt⟩
+
+  let some extractor := (data_extractors).get? cmd
+    | logger.log .error s!"No data extractor found for command '{cmd}'" ; return 1
+
   let mut writerName : String := ""
   match cfg.parquet, cfg.jsonl with
   | none, none =>
-    logger.log .error "No output format specified (use --parequet or --jsonl)" ; return 1
+    logger.log .error "No output format specified (use --parquet or --jsonl)" ; return 1
   | some _, none =>
     writerName := "parquet"
   | none, some _ =>
     writerName := "jsonl"
   | some _, some _ =>
     logger.log .error "Cannot specify both --parquet and --jsonl" ; return 1
-  let some extractor := (data_extractors).get? cmd
-    | logger.log .error s!"No data extractor found for command '{cmd}'" ; return 1
+
   let writer : Std.Mutex Writer ← Std.Mutex.new <| ← match writerName with
-    | "jsonl" => jsonlWriter cfg extractor
+    | "jsonl" => jsonlWriter
     | "parquet" => parquetWriter cfg extractor
     | _ => unreachable!
+
   let mut taskPool : Std.HashMap Nat (Task <| Except IO.Error UInt32) := {}
   for cfg in cfgs do
     let cfg := Lean.toJson cfg |>.compress
@@ -84,6 +88,7 @@ def run (cfg : Config) : IO UInt32 := do
     let idx := taskPool.size
     logger.log .info s!"Started extractor task {idx} with config {cfg}"
     taskPool := taskPool.insert idx task
+
   let mut results : Std.HashMap Nat (Except IO.Error UInt32) := {}
   while !(taskPool.isEmpty) do
     for (idx, task) in taskPool do
@@ -94,16 +99,19 @@ def run (cfg : Config) : IO UInt32 := do
         | .error err => logger.log .error s!"Extractor task {idx} failed with error: {err}"
         results := results.insert idx res
         taskPool := taskPool.erase idx
+
   writer.atomically <| get >>= fun w => w.wait
+
 where
-jsonlWriter (cfg : Config) (extractor : DataExtractor) : IO Writer := return {
+
+jsonlWriter : IO Writer := return {
   wait := return 0,
-  kill := return (),
   sink := fun s => do
     let stdout ← IO.getStdout
     stdout.putStrLn s
     stdout.flush
 }
+
 parquetWriter (cfg : Config) (extractor : DataExtractor) : IO Writer := do
   let dataDir := match cfg.dataDir with | some dataDir => dataDir | none => System.FilePath.mk "./data"
   let subprocess ← IO.Process.spawn {
@@ -113,15 +121,15 @@ parquetWriter (cfg : Config) (extractor : DataExtractor) : IO Writer := do
     stdin := .piped
   }
   let (stdin, child) ← subprocess.takeStdin
+  let stdinRef ← IO.mkRef (some stdin)
   return {
     wait := do
-      stdin.putStrLn "DONE"
-      stdin.flush
+      stdinRef.set none
       child.wait
-    kill := child.kill,
     sink := fun s => do
-      stdin.putStrLn s
-      stdin.flush
+      if let some h ← stdinRef.get then
+        h.putStrLn s
+        h.flush
   }
 
 end Orchestrator

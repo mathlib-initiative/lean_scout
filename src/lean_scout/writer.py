@@ -1,10 +1,8 @@
 import hashlib
 import json
-import logging
 import os
-import sys
 import threading
-from typing import Any, TextIO
+from typing import Any
 
 import pyarrow as pa  # type: ignore[import-untyped]
 import pyarrow.parquet as pq  # type: ignore[import-untyped]

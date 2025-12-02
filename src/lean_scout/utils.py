@@ -11,13 +11,14 @@ logger = logging.getLogger(__name__)
 
 
 def stream_json_lines(input_stream: Iterable[str] | TextIO) -> Iterator[dict[str, Any]]:
-    """Stream and parse JSON lines from input, logging malformed lines as warnings."""
+    """Stream and parse JSON lines from input, logging malformed lines as warnings.
+
+    Terminates on EOF (stdin closed).
+    """
     for line_num, line in enumerate(input_stream, start=1):
         line = line.strip()
         if not line:
             continue
-        if line == "DONE":
-            return
         try:
             yield json.loads(line)
         except json.JSONDecodeError as e:
