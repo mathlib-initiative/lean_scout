@@ -22,9 +22,12 @@ structure Config where
   batchRows : Option Nat := none
   parquet : Option Unit := none
   jsonl : Option Unit := none
+  parallel : Nat := 1
 
 def Config.processArgs (cfg : Config) (args : List String) : Config :=
   match args with
+  | "--parallel" :: n :: args =>
+    match n.toNat? with | some n => { cfg with parallel := n }.processArgs args | none => cfg.processArgs args
   | "--scoutDir" :: path :: args => { cfg with scoutDir := some <| System.FilePath.mk path }.processArgs args
   | "--command" :: command :: args => { cfg with command := command.toName }.processArgs args
   | "--dataDir" :: path :: args => { cfg with dataDir := some <| System.FilePath.mk path }.processArgs args
