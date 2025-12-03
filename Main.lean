@@ -63,13 +63,13 @@ structure Writer where
 unsafe
 def run (cfg : Config) : IO UInt32 := do
   let some cmd := cfg.command
-    | LeanScout.logger.log .error "No command specified in config" ; return 1
+    | logger.log .error "No command specified in config" ; return 1
   let some tgtSpec := cfg.targetSpec
-    | LeanScout.logger.log .error "No target specified in config" ; return 1
+    | logger.log .error "No target specified in config" ; return 1
   let some scoutDir := cfg.scoutDir
-    | LeanScout.logger.log .error "No scout directory specified in config" ; return 1
+    | logger.log .error "No scout directory specified in config" ; return 1
   let some writerSpec := cfg.writerSpec
-    | LeanScout.logger.log .error "No writer specified in config" ; return 1
+    | logger.log .error "No writer specified in config" ; return 1
 
   let cfgs : Array Extractor.Config := (← tgtSpec.toTargets).map fun tgt => ⟨cmd, tgt⟩
 
@@ -158,6 +158,6 @@ end Orchestrator
 
 end LeanScout
 
+open LeanScout Orchestrator in
 public unsafe def main (args : List String) : IO UInt32 := do
-  let cfg := LeanScout.Orchestrator.Config.processArgs {} args
-  LeanScout.Orchestrator.run cfg
+  run <| Config.processArgs {} args
