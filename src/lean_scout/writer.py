@@ -7,7 +7,8 @@ from typing import Any
 import pyarrow as pa  # type: ignore[import-untyped]
 import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
-class ShardedParquetWriter():
+
+class ShardedParquetWriter:
     """Manages sharded parquet file writing with batching."""
 
     def __init__(

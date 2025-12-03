@@ -1,11 +1,11 @@
 """CLI entry point for parquet_writer subprocess."""
 
 import argparse
-import logging
 import sys
 
 from .utils import deserialize_schema, stream_json_lines
 from .writer import ShardedParquetWriter
+
 
 def main() -> None:
     """Main entry point for parquet_writer subprocess."""
@@ -46,7 +46,7 @@ def main() -> None:
     # Deserialize to PyArrow schema
     try:
         pa_schema = deserialize_schema(args.schema)
-    except Exception as e:
+    except Exception:
         sys.exit(1)
 
     # Create writer
@@ -68,7 +68,7 @@ def main() -> None:
         writer.close()
         sys.exit(130)
 
-    except Exception as e:
+    except Exception:
         writer.close()
         sys.exit(1)
 

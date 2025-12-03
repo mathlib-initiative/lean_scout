@@ -4,7 +4,7 @@ set -e  # Exit on error
 
 echo ""
 echo "╔════════════════════════════════════════════════╗"
-echo "║     Lean Scout Test Suite (Four Phases)        ║"
+echo "║     Lean Scout Test Suite (Six Phases)         ║"
 echo "╚════════════════════════════════════════════════╝"
 
 # Ensure test_project uses the same Lean toolchain as the repo root
@@ -18,22 +18,32 @@ if [ "$ROOT_TOOLCHAIN" != "$TEST_PROJECT_TOOLCHAIN" ]; then
 fi
 
 echo ""
-echo "=== Phase 0: Lean Schema Tests ==="
+echo "=== Phase 0: Linting ==="
+echo "Running ruff linter on Python code"
+uv run ruff check src/ test/
+
+echo ""
+echo "=== Phase 1: Type Checking ==="
+echo "Running mypy on Python code"
+uv run mypy src/
+
+echo ""
+echo "=== Phase 2: Lean Schema Tests ==="
 echo "Testing schema serialization/deserialization roundtrip"
 lake test
 
 echo ""
-echo "=== Phase 1: Python Parquet Writer Tests ==="
+echo "=== Phase 3: Python Parquet Writer Tests ==="
 echo "Testing ShardedParquetWriter and schema utilities"
 uv run pytest test/internals/ -v --cov=lean_scout --cov-report=term-missing
 
 echo ""
-echo "=== Phase 2: Lean Orchestrator Integration Tests ==="
+echo "=== Phase 4: Lean Orchestrator Integration Tests ==="
 echo "Testing CLI argument handling and orchestration"
 ./test/integration/test_lean_orchestrator.sh
 
 echo ""
-echo "=== Phase 3: End-to-End Extractor Tests ==="
+echo "=== Phase 5: End-to-End Extractor Tests ==="
 echo "Testing data extraction pipeline using test_project"
 uv run pytest test/extractors/ -v
 
