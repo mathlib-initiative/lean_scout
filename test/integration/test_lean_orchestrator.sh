@@ -98,6 +98,14 @@ run_test "Invalid --numShards value shows error" \
     "lake run scout --command types --jsonl --numShards xyz --imports Lean" \
     1 "Invalid value for --numShards"
 
+run_test "Both --parquet and --jsonl shows error" \
+    "lake run scout --command types --parquet --jsonl --imports Lean" \
+    1 "Cannot specify both --parquet and --jsonl"
+
+run_test "Multiple targets shows error" \
+    "lake run scout --command types --jsonl --library Foo --imports Lean" \
+    1 "Cannot specify multiple targets"
+
 echo ""
 
 # --- Target Tests ---
@@ -111,6 +119,10 @@ run_test "--imports works" \
 run_test "--library works" \
     "lake run scout --command tactics --jsonl --parallel 1 --library LeanScoutTestProject" \
     0 ""
+
+run_test "--library with invalid name shows error" \
+    "lake run scout --command tactics --jsonl --library NonexistentLibrary" \
+    1 "lake query failed"
 
 echo ""
 

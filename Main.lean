@@ -18,42 +18,72 @@ inductive WriterSpec where
   | jsonl
 
 structure Config where
+  scoutDir : System.FilePath
+  command : Command
+  targetSpec : TargetSpec
+  writerSpec : WriterSpec
+  dataDir : System.FilePath
+  numShards : Nat
+  batchRows : Nat
+  parallel : Nat
+
+private structure ArgState where
   scoutDir : Option System.FilePath := none
   command : Option Command := none
   targetSpec : Option TargetSpec := none
-  dataDir : Option System.FilePath := none
   writerSpec : Option WriterSpec := none
-  numShards : Nat := 128
-  batchRows : Nat := 1024
-  parallel : Nat := 1
-  errors : Array String := #[]
+  dataDir : Option System.FilePath := none
+  numShards : Option Nat := none
+  batchRows : Option Nat := none
+  parallel : Option Nat := none
 
-def Config.processArgs (cfg : Config) (args : List String) : Config :=
-  match args with
-  | "--parallel" :: nStr :: args =>
-    match nStr.toNat? with
-    | some n => { cfg with parallel := n }.processArgs args
-    | none => { cfg with errors := cfg.errors.push s!"Invalid value for --parallel: '{nStr}'" }.processArgs args
-  | "--scoutDir" :: path :: args => { cfg with scoutDir := some <| System.FilePath.mk path }.processArgs args
-  | "--command" :: command :: args => { cfg with command := command.toName }.processArgs args
-  | "--dataDir" :: path :: args => { cfg with dataDir := some <| System.FilePath.mk path }.processArgs args
-  | "--numShards" :: nStr :: args =>
-    match nStr.toNat? with
-    | some n => { cfg with numShards := n }.processArgs args
-    | none => { cfg with errors := cfg.errors.push s!"Invalid value for --numShards: '{nStr}'" }.processArgs args
-  | "--batchRows" :: nStr :: args =>
-    match nStr.toNat? with
-    | some n => { cfg with batchRows := n }.processArgs args
-    | none => { cfg with errors := cfg.errors.push s!"Invalid value for --batchRows: '{nStr}'" }.processArgs args
-  | "--parquet" :: args => { cfg with writerSpec := some .parquet }.processArgs args
-  | "--jsonl" :: args => { cfg with writerSpec := some .jsonl }.processArgs args
-  | "--imports" :: importsList => { cfg with targetSpec := some <| .imports <| importsList.toArray }
-  | "--read" :: paths@(_ :: _) => { cfg with targetSpec := some <| .read <| paths.map System.FilePath.mk }
-  | "--library" :: [name] => { cfg with targetSpec := some <| .library <| name.toName }
-  | [] => cfg
-  | unknown :: args => { cfg with errors := cfg.errors.push s!"Unknown argument: '{unknown}'" }.processArgs args
+private def ArgState.toConfig (s : ArgState) : Except String Config := do
+  let some scoutDir := s.scoutDir | throw "No scout directory specified (use --scoutDir)"
+  let some command := s.command | throw "No command specified (use --command)"
+  let some targetSpec := s.targetSpec | throw "No target specified (use --imports, --library, or --read)"
+  let some writerSpec := s.writerSpec | throw "No writer specified (use --parquet or --jsonl)"
+  return {
+    scoutDir, command, targetSpec, writerSpec,
+    dataDir := s.dataDir.getD <| .mk "./data",
+    numShards := s.numShards.getD 128,
+    batchRows := s.batchRows.getD 1024,
+    parallel := s.parallel.getD 1
+  }
 
-def TargetSpec.toTargets : TargetSpec → IO (Array Target)
+def parseArgs (args : List String) : Except String Config := go args {}
+where
+  go : List String → ArgState → Except String Config
+    | "--parallel" :: nStr :: rest, s => do
+      let some n := nStr.toNat? | throw s!"Invalid value for --parallel: '{nStr}'"
+      go rest { s with parallel := some n }
+    | "--scoutDir" :: path :: rest, s => go rest { s with scoutDir := some <| .mk path }
+    | "--command" :: cmd :: rest, s => go rest { s with command := cmd.toName }
+    | "--dataDir" :: path :: rest, s => go rest { s with dataDir := some <| .mk path }
+    | "--numShards" :: nStr :: rest, s => do
+      let some n := nStr.toNat? | throw s!"Invalid value for --numShards: '{nStr}'"
+      go rest { s with numShards := some n }
+    | "--batchRows" :: nStr :: rest, s => do
+      let some n := nStr.toNat? | throw s!"Invalid value for --batchRows: '{nStr}'"
+      go rest { s with batchRows := some n }
+    | "--parquet" :: rest, s => do
+      if s.writerSpec.isSome then throw "Cannot specify both --parquet and --jsonl"
+      go rest { s with writerSpec := some .parquet }
+    | "--jsonl" :: rest, s => do
+      if s.writerSpec.isSome then throw "Cannot specify both --parquet and --jsonl"
+      go rest { s with writerSpec := some .jsonl }
+    | "--imports" :: importsList, s => do
+      if s.targetSpec.isSome then throw "Cannot specify multiple targets (--imports, --library, or --read)"
+      { s with targetSpec := some <| .imports importsList.toArray }.toConfig
+    | "--read" :: paths@(_ :: _), s => do
+      if s.targetSpec.isSome then throw "Cannot specify multiple targets (--imports, --library, or --read)"
+      { s with targetSpec := some <| .read <| paths.map .mk }.toConfig
+    | "--library" :: name :: rest, s => do
+      if s.targetSpec.isSome then throw "Cannot specify multiple targets (--imports, --library, or --read)"
+      go rest { s with targetSpec := some <| .library name.toName }
+    | [], s => s.toConfig
+    | unknown :: _, _ => throw s!"Unknown argument: '{unknown}'"
+
+def TargetSpec.toTargets : TargetSpec → ExceptT String IO (Array Target)
   | .imports names => return #[.mkImports names]
   | .read paths => return paths.toArray.map fun p => .read p
   | .library name => do
@@ -62,10 +92,10 @@ def TargetSpec.toTargets : TargetSpec → IO (Array Target)
       args := #["query", "-q", s!"{name}:module_paths"]
     }
     if output.exitCode != 0 then
-      throw <| IO.userError s!"lake query failed for library '{name}': {output.stderr.trim}"
+      throw s!"lake query failed for library '{name}': {output.stderr.trim}"
     let lines := output.stdout.splitOn "\n" |>.filter (·.trim ≠ "")
     if lines.isEmpty then
-      throw <| IO.userError s!"No modules found for library '{name}'"
+      throw s!"No modules found for library '{name}'"
     return lines.toArray.map fun s => .read <| System.FilePath.mk s
 
 structure Writer where
@@ -75,33 +105,22 @@ structure Writer where
 -- unsafe because `data_extractors` elaborator runs in meta context
 unsafe
 def run (cfg : Config) : IO UInt32 := do
-  -- Check for argument parsing errors
-  if !cfg.errors.isEmpty then
-    for err in cfg.errors do
-      logger.log .error err
-    return 1
+  let targets ← match ← cfg.targetSpec.toTargets.run with
+    | .ok tgts => pure tgts
+    | .error err => logger.log .error err ; return 1
 
-  let some cmd := cfg.command
-    | logger.log .error "No command specified (use --command)" ; return 1
-  let some tgtSpec := cfg.targetSpec
-    | logger.log .error "No target specified (use --imports, --library, or --read)" ; return 1
-  let some scoutDir := cfg.scoutDir
-    | logger.log .error "No scout directory specified (use --scoutDir)" ; return 1
-  let some writerSpec := cfg.writerSpec
-    | logger.log .error "No writer specified (use --parquet or --jsonl)" ; return 1
+  let extractorCfgs : Array Extractor.Config := targets.map fun tgt => ⟨cfg.command, tgt⟩
 
-  let cfgs : Array Extractor.Config := (← tgtSpec.toTargets).map fun tgt => ⟨cmd, tgt⟩
+  let some extractor := (data_extractors).get? cfg.command
+    | logger.log .error s!"No data extractor found for command '{cfg.command}'" ; return 1
 
-  let some extractor := (data_extractors).get? cmd
-    | logger.log .error s!"No data extractor found for command '{cmd}'" ; return 1
-
-  let writer : Std.Mutex Writer ← Std.Mutex.new <| ← match writerSpec with
+  let writer : Std.Mutex Writer ← Std.Mutex.new <| ← match cfg.writerSpec with
   | .jsonl => jsonlWriter
-  | .parquet => parquetWriter scoutDir cfg extractor
+  | .parquet => parquetWriter cfg extractor
 
   let mut launches : Array (String × IO (Task <| Except IO.Error UInt32)) := #[]
-  for cfg in cfgs do
-    let cfgArg := Lean.toJson cfg |>.compress
+  for extractorCfg in extractorCfgs do
+    let cfgArg := Lean.toJson extractorCfg |>.compress
     let args : Array String := #[
       "exe", "-q", "lean_scout_extractor", cfgArg
     ]
@@ -156,12 +175,11 @@ jsonlWriter : IO Writer := return {
     stdout.flush
 }
 
-parquetWriter (scoutDir : System.FilePath) (cfg : Config) (extractor : DataExtractor) : IO Writer := do
-  let dataDir := match cfg.dataDir with | some dataDir => dataDir | none => System.FilePath.mk "./data"
-  IO.FS.createDirAll dataDir
-  let dataDir ← IO.FS.realPath dataDir
+parquetWriter (cfg : Config) (extractor : DataExtractor) : IO Writer := do
+  IO.FS.createDirAll cfg.dataDir
+  let dataDir ← IO.FS.realPath cfg.dataDir
   let subprocess ← IO.Process.spawn {
-    cwd := scoutDir
+    cwd := cfg.scoutDir
     cmd := "uv"
     args := #["run", "parquet_writer",
       "--dataDir", dataDir.toString,
@@ -189,4 +207,6 @@ end LeanScout
 
 open LeanScout Orchestrator in
 public unsafe def main (args : List String) : IO UInt32 := do
-  run <| Config.processArgs {} args
+  match parseArgs args with
+  | .ok cfg => run cfg
+  | .error err => logger.log .error err ; return 1
