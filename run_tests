@@ -4,7 +4,7 @@ set -e  # Exit on error
 
 echo ""
 echo "╔════════════════════════════════════════════════╗"
-echo "║     Lean Scout Test Suite (Six Phases)         ║"
+echo "║     Lean Scout Test Suite (Seven Phases)       ║"
 echo "╚════════════════════════════════════════════════╝"
 
 # Ensure test_project uses the same Lean toolchain as the repo root
@@ -33,17 +33,22 @@ echo "Testing schema serialization/deserialization roundtrip"
 lake test
 
 echo ""
-echo "=== Phase 3: Python Parquet Writer Tests ==="
+echo "=== Phase 3: Build Test Project ==="
+echo "Building test_project for integration tests"
+(cd test_project && lake build)
+
+echo ""
+echo "=== Phase 4: Python Parquet Writer Tests ==="
 echo "Testing ShardedParquetWriter and schema utilities"
 uv run pytest test/internals/ -v --cov=lean_scout --cov-report=term-missing
 
 echo ""
-echo "=== Phase 4: Lean Orchestrator Integration Tests ==="
+echo "=== Phase 5: Lean Orchestrator Integration Tests ==="
 echo "Testing CLI argument handling and orchestration"
 ./test/integration/test_lean_orchestrator.sh
 
 echo ""
-echo "=== Phase 5: End-to-End Extractor Tests ==="
+echo "=== Phase 6: End-to-End Extractor Tests ==="
 echo "Testing data extraction pipeline using test_project"
 uv run pytest test/extractors/ -v
 
