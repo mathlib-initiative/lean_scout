@@ -318,3 +318,35 @@ def test_writer_compression(simple_schema, writer_dir):
     # Verify files were created
     parquet_files = glob.glob(str(writer_dir / "*.parquet"))
     assert len(parquet_files) > 0
+
+
+def test_writer_flush_shard(simple_schema, writer_dir):
+    """Test flushing a specific shard."""
+    writer = ShardedParquetWriter(
+        schema=simple_schema,
+        out_dir=str(writer_dir),
+        num_shards=4,
+        batch_rows=100,  # Large batch so auto-flush doesn't trigger
+        shard_key="name",
+    )
+
+    # Add records with a known name to get a specific shard
+    test_name = "test_record"
+    shard = writer._compute_shard(test_name)
+
+    # Add records to that shard
+    for i in range(5):
+        writer.add_record({"name": test_name, "value": i})
+
+    # Verify buffer has records
+    assert len(writer.buffers[shard]) == 5
+
+    # Flush only that shard
+    writer.flush_shard(shard)
+
+    # Buffer should now be empty
+    assert len(writer.buffers[shard]) == 0
+
+    # Other shards should be unaffected (they're empty anyway)
+    stats = writer.close()
+    assert stats["total_rows"] == 5
