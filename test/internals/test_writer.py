@@ -1,17 +1,13 @@
-"""Tests for writer infrastructure (ShardedParquetWriter and JsonLinesWriter).
+"""Tests for writer infrastructure (ShardedParquetWriter).
 
-This module tests the writers' core functionality without extracting Lean data.
+This module tests the ShardedParquetWriter's core functionality.
 Tests focus on:
 - Sharding logic (BLAKE2b hashing)
 - Thread safety
 - Batching behavior
 - File creation and statistics
-- JSON Lines output to stdout
 """
 import glob
-import io
-import json
-import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -21,7 +17,7 @@ import pyarrow as pa
 import pytest
 from datasets import Dataset
 
-from lean_scout.writer import JsonLinesWriter, ShardedParquetWriter
+from lean_scout.writer import ShardedParquetWriter
 
 
 @pytest.fixture
@@ -322,130 +318,3 @@ def test_writer_compression(simple_schema, writer_dir):
     # Verify files were created
     parquet_files = glob.glob(str(writer_dir / "*.parquet"))
     assert len(parquet_files) > 0
-
-
-# ============================================================================
-# JsonLinesWriter Tests
-# ============================================================================
-
-def test_jsonl_writer_basic_add_and_close():
-    output = io.StringIO()
-    writer = JsonLinesWriter(stream=output)
-
-    records = [
-        {"name": "foo", "value": 1},
-        {"name": "bar", "value": 2},
-        {"name": "baz", "value": 3},
-    ]
-
-    for record in records:
-        writer.add_record(record)
-
-    stats = writer.close()
-
-    assert stats["total_rows"] == 3
-
-    # Verify output format
-    lines = output.getvalue().strip().split("\n")
-    assert len(lines) == 3
-
-    # Verify each line is valid JSON
-    for i, line in enumerate(lines):
-        parsed = json.loads(line)
-        assert parsed == records[i]
-
-
-def test_jsonl_writer_empty_close():
-    output = io.StringIO()
-    writer = JsonLinesWriter(stream=output)
-    stats = writer.close()
-
-    assert stats["total_rows"] == 0
-    assert output.getvalue() == ""
-
-
-def test_jsonl_writer_thread_safety():
-    output = io.StringIO()
-    writer = JsonLinesWriter(stream=output)
-
-    num_threads = 4
-    records_per_thread = 50
-
-    def write_records(thread_id):
-        for i in range(records_per_thread):
-            writer.add_record({
-                "thread": thread_id,
-                "index": i,
-            })
-
-    threads = []
-    for tid in range(num_threads):
-        t = threading.Thread(target=write_records, args=(tid,))
-        threads.append(t)
-        t.start()
-
-    for t in threads:
-        t.join()
-
-    stats = writer.close()
-    expected_total = num_threads * records_per_thread
-    assert stats["total_rows"] == expected_total
-
-    # Verify output has correct number of lines
-    lines = [line for line in output.getvalue().strip().split("\n") if line]
-    assert len(lines) == expected_total
-
-    # Verify each line is valid JSON
-    for line in lines:
-        parsed = json.loads(line)
-        assert "thread" in parsed
-        assert "index" in parsed
-
-
-def test_jsonl_writer_unicode():
-    output = io.StringIO()
-    writer = JsonLinesWriter(stream=output)
-
-    records = [
-        {"name": "日本語", "value": "こんにちは"},
-        {"name": "emoji", "value": "🎉"},
-        {"name": "mixed", "value": "Hello 世界"},
-    ]
-
-    for record in records:
-        writer.add_record(record)
-
-    stats = writer.close()
-    assert stats["total_rows"] == 3
-
-    lines = output.getvalue().strip().split("\n")
-
-    for i, line in enumerate(lines):
-        parsed = json.loads(line)
-        assert parsed == records[i]
-
-
-def test_jsonl_writer_complex_values():
-    output = io.StringIO()
-    writer = JsonLinesWriter(stream=output)
-
-    record = {
-        "name": "complex",
-        "nested": {"a": 1, "b": [1, 2, 3]},
-        "list": [{"x": 1}, {"x": 2}],
-        "null_value": None,
-    }
-
-    writer.add_record(record)
-    stats = writer.close()
-
-    assert stats["total_rows"] == 1
-
-    parsed = json.loads(output.getvalue().strip())
-    assert parsed == record
-
-
-def test_jsonl_writer_defaults_to_stdout():
-    """Verify that JsonLinesWriter defaults to sys.stdout when no stream provided."""
-    writer = JsonLinesWriter()
-    assert writer.stream is sys.stdout
