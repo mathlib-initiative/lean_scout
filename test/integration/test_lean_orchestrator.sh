@@ -26,6 +26,10 @@ pass() {
 
 fail() {
     echo -e "${RED}✗${NC} $1"
+    if [ -n "$2" ]; then
+        echo -e "${YELLOW}  Output:${NC}"
+        echo "$2" | head -20 | sed 's/^/    /'
+    fi
     FAILED=$((FAILED + 1))
 }
 
@@ -43,7 +47,7 @@ run_test() {
 
     # Check exit code
     if [ "$exit_code" -ne "$expected_exit" ]; then
-        fail "$name (expected exit $expected_exit, got $exit_code)"
+        fail "$name (expected exit $expected_exit, got $exit_code)" "$output"
         return
     fi
 
@@ -52,7 +56,7 @@ run_test() {
         if echo "$output" | grep -q "$check_pattern"; then
             pass "$name"
         else
-            fail "$name (pattern '$check_pattern' not found)"
+            fail "$name (pattern '$check_pattern' not found)" "$output"
         fi
     else
         pass "$name"
@@ -131,22 +135,23 @@ echo "Output Formats:"
 
 # Test JSONL outputs valid JSON
 set +e
-output=$(lake run scout --command types --jsonl --imports LeanScoutTestProject 2>/dev/null | head -1)
+full_output=$(lake run scout --command types --jsonl --imports LeanScoutTestProject 2>&1)
+output=$(echo "$full_output" | grep -v '^\[' | head -1)  # Filter out log lines starting with [
 if echo "$output" | python3 -c "import sys, json; json.loads(sys.stdin.read())" 2>/dev/null; then
     pass "JSONL outputs valid JSON"
 else
-    fail "JSONL outputs valid JSON"
+    fail "JSONL outputs valid JSON" "$full_output"
 fi
 set -e
 
 # Test parquet creates files
 tmpdir=$(mktemp -d)
 set +e
-lake run scout --command types --parquet --dataDir "$tmpdir" --imports LeanScoutTestProject 2>/dev/null
+parquet_output=$(lake run scout --command types --parquet --dataDir "$tmpdir" --imports LeanScoutTestProject 2>&1)
 if ls "$tmpdir"/*.parquet >/dev/null 2>&1; then
     pass "Parquet creates files"
 else
-    fail "Parquet creates files"
+    fail "Parquet creates files" "$parquet_output"
 fi
 set -e
 rm -rf "$tmpdir"
@@ -189,12 +194,12 @@ echo "Parquet Writer Options:"
 # Test --numShards option
 tmpdir=$(mktemp -d)
 set +e
-lake run scout --command types --parquet --dataDir "$tmpdir" --numShards 4 --imports LeanScoutTestProject 2>/dev/null
+shards_output=$(lake run scout --command types --parquet --dataDir "$tmpdir" --numShards 4 --imports LeanScoutTestProject 2>&1)
 shard_count=$(ls "$tmpdir"/*.parquet 2>/dev/null | wc -l)
 if [ "$shard_count" -le 4 ] && [ "$shard_count" -gt 0 ]; then
     pass "--numShards limits shard count (got $shard_count shards)"
 else
-    fail "--numShards limits shard count (expected <=4, got $shard_count)"
+    fail "--numShards limits shard count (expected <=4, got $shard_count)" "$shards_output"
 fi
 set -e
 rm -rf "$tmpdir"
