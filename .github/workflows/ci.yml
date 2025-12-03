@@ -24,6 +24,9 @@ jobs:
 
       - uses: leanprover/lean-action@v1
 
+      - name: Build Lean project
+        run: lake build
+
       - name: Run tests
         run: ./run_tests
 

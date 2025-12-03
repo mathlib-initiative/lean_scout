@@ -10,7 +10,7 @@ To use this tool, you must have:
 
 ## Quickstart
 
-From the root of a Lean4 project that includes `lean_scout`, you can stream the wrapper and run it against one of your libraries (here, `MyLibrary`):
+From the root of a Lean4 project, use the extraction script against one of your libraries (here, `MyLibrary`):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mathlib-initiative/lean_scout/main/extract.sh | bash -s -- --command tactics --parquet --library MyLibrary
 ```
@@ -39,10 +39,6 @@ lake run scout --command tactics --parquet --parallel 4 --read File1.lean File2.
 # Extract from entire library (recommended for large codebases)
 lake run scout --command tactics --parquet --parallel 8 --library LeanScoutTest
 
-# Or use a file list
-echo "File1.lean" > file_list.txt
-echo "File2.lean" >> file_list.txt
-lake run scout --command tactics --parquet --parallel 8 --readList file_list.txt
 ```
 
 If you have Lean Scout as a dependency with `Mathlib` as another dependency, you can similarly run:
@@ -58,7 +54,7 @@ lake run scout --command types --parquet --dataDir $HOME/storage --imports Mathl
 
 This will write the data to files located within the `$HOME/storage/types` directory.
 
-By default Lean Scout resolves both outputs and relative read targets from the directory where you invoke the command (`--cmdRoot`, default: current working directory). If you run via a wrapper script or from outside the Lean project root, pass `--cmdRoot /path/to/where/paths/are/relative` so relative `--read`/`--readList` paths and outputs stay anchored to that location.
+By default Lean Scout resolves both outputs and relative read targets from the directory where you invoke the command (`--cmdRoot`, default: current working directory). If you run via a wrapper script or from outside the Lean project root, pass `--cmdRoot /path/to/where/paths/are/relative` so relative `--read` paths and outputs stay anchored to that location.
 
 If you stop an extraction early (for example with `Ctrl+C`), Lean Scout leaves the partially written Parquet directory on disk; rerunning with the same `--command` and `--dataDir` will fail with a "Data directory … already exists" error. Remove the previous output directory or point `--dataDir` to a fresh location before retrying.
 If the extraction exits because of an error, Lean Scout removes the partially written directory for you; manual cleanup is only required when you interrupt the run yourself.
@@ -87,13 +83,9 @@ Lean Scout supports multiple extraction modes:
    - Uses `lake query -q <library>:module_paths` to automatically discover all module files
    - Example: `lake run scout --command tactics --parquet --parallel 8 --library LeanScoutTest`
 
-4. **`--readList`**: Extract from files listed in a text file (parallel subprocesses)
-   - Best for: Custom file lists or integration with build systems
-   - Example: `lake run scout --command tactics --parquet --parallel 8 --readList my_files.txt`
-
 **Note**: The `--library` flag is the recommended approach for extracting data from entire libraries, as it automatically discovers all modules without requiring manual file management.
 
-**Important**: The target flags (`--imports`, `--library`, `--read`, `--readList`) consume all remaining command-line arguments. Place other flags like `--parquet`, `--jsonl`, `--parallel`, `--dataDir` before the target specification.
+**Important**: The target flags (`--imports`, `--library`, `--read`) consume all remaining command-line arguments. Place other flags like `--parquet`, `--jsonl`, `--parallel`, `--dataDir` before the target specification.
 
 ## Sharding
 
@@ -126,7 +118,7 @@ lake run scout --command types --parquet --imports Lean
 ### `tactics`
 Extracts tactic invocations with goal states, used constants, elaborator info, and syntax kinds.
 
-**Supported modes**: `--read`, `--readList`, `--library`
+**Supported modes**: `--read`, `--library`
 
 **Example**:
 ```bash

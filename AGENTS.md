@@ -22,7 +22,7 @@ lake run scout --command types --parquet --imports Lean  # Example extractor inv
 - Lean: follow standard Lean4 style (two-space indents, modules mirroring paths). Use `UpperCamelCase` for types, `lowerCamelCase` for terms of types, `snake_case` for proofs. 
 - Use descriptive tactic names, and keep tactic blocks readable over dense nesting.
 - Python: PEP 8 with type hints and docstrings for public functions; `snake_case` for functions/vars, `PascalCase` for classes. Prefer explicit paths (`Path` over strings) and small, testable helpers.
-- Keep command-line flags consistent with existing CLI (`--imports`, `--library`, `--readList`, `--cmdRoot`); reuse shared utilities rather than re-spawning processes ad hoc.
+- Keep command-line flags consistent with existing CLI (`--imports`, `--library`, `--read`, `--cmdRoot`); reuse shared utilities rather than re-spawning processes ad hoc.
 
 ## Testing Guidelines
 - Add or update Lean-facing schemas when introducing new extractors; surface schemas through `Lake` to keep `lake test` passing.
@@ -57,8 +57,7 @@ Lean Scout creates datasets from Lean4 projects by extracting structured data (t
   - `lake run scout --command tactics --parquet --read MyFile.lean`
   - `lake run scout --command tactics --parquet --parallel 4 --read File1.lean File2.lean`
   - `lake run scout --command tactics --parquet --parallel 8 --library LeanScoutTest`
-  - File list helper: `lake build LeanScout:module_paths` then `--parquet --parallel 8 --readList module_paths`
-  - Target flags (`--imports`, `--library`, `--read`, `--readList`) consume remaining arguments; place other flags before them.
+  - Target flags (`--imports`, `--library`, `--read`) consume remaining arguments; place other flags before them.
 
 ## Testing
 - All phases: `./run_tests`
@@ -71,11 +70,11 @@ Four-phase suite: Lean schema roundtrips, Python parquet writer, Lean orchestrat
 
 ## Architecture Details
 - Core Lean type: `DataExtractor` (schema, shard key, extractor function). Registered via `@[data_extractor cmd]` and discovered at compile time.
-- Targets: `.imports` (single subprocess) vs `.input` (per-file subprocess; used by `--read`, `--readList`, `--library`).
+- Targets: `.imports` (single subprocess) vs `.input` (per-file subprocess; used by `--read`, `--library`).
 - Writer: `ShardedParquetWriter` (Python) hashes the key field (BLAKE2b) to shards; used by Lean orchestrator via subprocess.
 - Lake config: `scout` lake script adds `--scoutDir` automatically; `module_paths` facet exposes library file lists via `lake query -q <lib>:module_paths`.
 - Convenience script: `extract.sh` creates a temporary subproject, builds `lean_scout`, then runs `lake run scout`. Pass `--dataDir` to place outputs somewhere persistent; the default temp directory is ephemeral.
-- CLI flags: Target flags (`--imports`, `--library`, `--read`, `--readList`) consume all remaining arguments; place other flags before them.
+- CLI flags: Target flags (`--imports`, `--library`, `--read`) consume all remaining arguments; place other flags before them.
 
 ## Adding Extractors
 1) New file in `LeanScout/DataExtractors/`, define `@[data_extractor mycommand]` with schema, key, and extraction logic.
