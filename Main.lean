@@ -19,6 +19,7 @@ inductive WriterSpec where
 
 structure Config where
   scoutDir : System.FilePath
+  cmdRoot : System.FilePath
   command : Command
   targetSpec : TargetSpec
   writerSpec : WriterSpec
@@ -29,6 +30,7 @@ structure Config where
 
 private structure ArgState where
   scoutDir : Option System.FilePath := none
+  cmdRoot : Option System.FilePath := none
   command : Option Command := none
   targetSpec : Option TargetSpec := none
   writerSpec : Option WriterSpec := none
@@ -37,14 +39,23 @@ private structure ArgState where
   batchRows : Option Nat := none
   parallel : Option Nat := none
 
+private def resolvePath (cmdRoot : System.FilePath) (path : System.FilePath) : System.FilePath :=
+  if path.isAbsolute then path else cmdRoot / path
+
 private def ArgState.toConfig (s : ArgState) : Except String Config := do
   let some scoutDir := s.scoutDir | throw "No scout directory specified (use --scoutDir)"
   let some command := s.command | throw "No command specified (use --command)"
   let some targetSpec := s.targetSpec | throw "No target specified (use --imports, --library, or --read)"
   let some writerSpec := s.writerSpec | throw "No writer specified (use --parquet or --jsonl)"
+  let cmdRoot := s.cmdRoot.getD <| .mk "."
+  -- Resolve dataDir relative to cmdRoot
+  let dataDir := resolvePath cmdRoot <| s.dataDir.getD <| .mk "./data"
+  -- Resolve read paths relative to cmdRoot
+  let targetSpec := match targetSpec with
+    | .read paths => .read <| paths.map (resolvePath cmdRoot)
+    | other => other
   return {
-    scoutDir, command, targetSpec, writerSpec,
-    dataDir := s.dataDir.getD <| .mk "./data",
+    scoutDir, cmdRoot, command, targetSpec, writerSpec, dataDir,
     numShards := s.numShards.getD 128,
     batchRows := s.batchRows.getD 1024,
     parallel := s.parallel.getD 1
@@ -57,6 +68,7 @@ where
       let some n := nStr.toNat? | throw s!"Invalid value for --parallel: '{nStr}'"
       go rest { s with parallel := some n }
     | "--scoutDir" :: path :: rest, s => go rest { s with scoutDir := some <| .mk path }
+    | "--cmdRoot" :: path :: rest, s => go rest { s with cmdRoot := some <| .mk path }
     | "--command" :: cmd :: rest, s => go rest { s with command := cmd.toName }
     | "--dataDir" :: path :: rest, s => go rest { s with dataDir := some <| .mk path }
     | "--numShards" :: nStr :: rest, s => do
