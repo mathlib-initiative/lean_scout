@@ -90,6 +90,14 @@ run_test "Invalid command shows error" \
     "lake run scout --command nonexistent --parquet --imports Lean" \
     1 "No data extractor found"
 
+run_test "Invalid --parallel value shows error" \
+    "lake run scout --command types --jsonl --parallel abc --imports Lean" \
+    1 "Invalid value for --parallel"
+
+run_test "Invalid --numShards value shows error" \
+    "lake run scout --command types --jsonl --numShards xyz --imports Lean" \
+    1 "Invalid value for --numShards"
+
 echo ""
 
 # --- Target Tests ---
@@ -99,8 +107,9 @@ run_test "--imports works" \
     "lake run scout --command types --jsonl --imports LeanScoutTestProject" \
     0 ""
 
+# Note: --library produces .input targets (file paths), which tactics supports but types doesn't
 run_test "--library works" \
-    "lake run scout --command types --jsonl --parallel 1 --library LeanScoutTestProject" \
+    "lake run scout --command tactics --jsonl --parallel 1 --library LeanScoutTestProject" \
     0 ""
 
 echo ""
@@ -149,9 +158,9 @@ run_test "--parallel option accepted" \
     "lake run scout --command types --jsonl --parallel 2 --imports LeanScoutTestProject" \
     0 ""
 
-# Test multiple tasks with --library
+# Test multiple tasks with --library (tactics supports .input targets)
 set +e
-logs=$(lake run scout --command types --jsonl --parallel 2 --library LeanScoutTestProject 2>&1 >/dev/null)
+logs=$(lake run scout --command tactics --jsonl --parallel 2 --library LeanScoutTestProject 2>&1 >/dev/null)
 task_count=$(echo "$logs" | grep -c "Started extractor task" || true)
 if [ "$task_count" -ge 2 ]; then
     pass "Multiple tasks started with --library (found $task_count)"

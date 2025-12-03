@@ -10,7 +10,7 @@ open Lean
 
 inductive TargetSpec where
   | imports (names : Array String)
-  | read (path : System.FilePath)
+  | read (paths : List System.FilePath)
   | library (name : Name)
 
 inductive WriterSpec where
@@ -26,50 +26,69 @@ structure Config where
   numShards : Nat := 128
   batchRows : Nat := 1024
   parallel : Nat := 1
+  errors : Array String := #[]
 
 def Config.processArgs (cfg : Config) (args : List String) : Config :=
   match args with
-  | "--parallel" :: n :: args =>
-    match n.toNat? with | some n => { cfg with parallel := n }.processArgs args | none => cfg.processArgs args
+  | "--parallel" :: nStr :: args =>
+    match nStr.toNat? with
+    | some n => { cfg with parallel := n }.processArgs args
+    | none => { cfg with errors := cfg.errors.push s!"Invalid value for --parallel: '{nStr}'" }.processArgs args
   | "--scoutDir" :: path :: args => { cfg with scoutDir := some <| System.FilePath.mk path }.processArgs args
   | "--command" :: command :: args => { cfg with command := command.toName }.processArgs args
   | "--dataDir" :: path :: args => { cfg with dataDir := some <| System.FilePath.mk path }.processArgs args
-  | "--numShards" :: n :: args =>
-    match n.toNat? with | some n => { cfg with numShards := n }.processArgs args | none => cfg.processArgs args
-  | "--batchRows" :: n :: args =>
-    match n.toNat? with | some n => { cfg with batchRows := n }.processArgs args | none => cfg.processArgs args
+  | "--numShards" :: nStr :: args =>
+    match nStr.toNat? with
+    | some n => { cfg with numShards := n }.processArgs args
+    | none => { cfg with errors := cfg.errors.push s!"Invalid value for --numShards: '{nStr}'" }.processArgs args
+  | "--batchRows" :: nStr :: args =>
+    match nStr.toNat? with
+    | some n => { cfg with batchRows := n }.processArgs args
+    | none => { cfg with errors := cfg.errors.push s!"Invalid value for --batchRows: '{nStr}'" }.processArgs args
   | "--parquet" :: args => { cfg with writerSpec := some .parquet }.processArgs args
   | "--jsonl" :: args => { cfg with writerSpec := some .jsonl }.processArgs args
   | "--imports" :: importsList => { cfg with targetSpec := some <| .imports <| importsList.toArray }
-  | "--read" :: [path] => { cfg with targetSpec := some <| .read <| System.FilePath.mk path }
+  | "--read" :: paths@(_ :: _) => { cfg with targetSpec := some <| .read <| paths.map System.FilePath.mk }
   | "--library" :: [name] => { cfg with targetSpec := some <| .library <| name.toName }
-  | _ => cfg
+  | [] => cfg
+  | unknown :: args => { cfg with errors := cfg.errors.push s!"Unknown argument: '{unknown}'" }.processArgs args
 
 def TargetSpec.toTargets : TargetSpec → IO (Array Target)
   | .imports names => return #[.mkImports names]
-  | .read path => return #[.read path]
+  | .read paths => return paths.toArray.map fun p => .read p
   | .library name => do
     let output ← IO.Process.output {
       cmd := "lake"
       args := #["query", "-q", s!"{name}:module_paths"]
     }
+    if output.exitCode != 0 then
+      throw <| IO.userError s!"lake query failed for library '{name}': {output.stderr.trim}"
     let lines := output.stdout.splitOn "\n" |>.filter (·.trim ≠ "")
+    if lines.isEmpty then
+      throw <| IO.userError s!"No modules found for library '{name}'"
     return lines.toArray.map fun s => .read <| System.FilePath.mk s
 
 structure Writer where
   wait : IO UInt32
   sink : String → IO Unit
 
+-- unsafe because `data_extractors` elaborator runs in meta context
 unsafe
 def run (cfg : Config) : IO UInt32 := do
+  -- Check for argument parsing errors
+  if !cfg.errors.isEmpty then
+    for err in cfg.errors do
+      logger.log .error err
+    return 1
+
   let some cmd := cfg.command
-    | logger.log .error "No command specified in config" ; return 1
+    | logger.log .error "No command specified (use --command)" ; return 1
   let some tgtSpec := cfg.targetSpec
-    | logger.log .error "No target specified in config" ; return 1
+    | logger.log .error "No target specified (use --imports, --library, or --read)" ; return 1
   let some scoutDir := cfg.scoutDir
-    | logger.log .error "No scout directory specified in config" ; return 1
+    | logger.log .error "No scout directory specified (use --scoutDir)" ; return 1
   let some writerSpec := cfg.writerSpec
-    | logger.log .error "No writer specified in config" ; return 1
+    | logger.log .error "No writer specified (use --parquet or --jsonl)" ; return 1
 
   let cfgs : Array Extractor.Config := (← tgtSpec.toTargets).map fun tgt => ⟨cmd, tgt⟩
 
@@ -95,7 +114,7 @@ def run (cfg : Config) : IO UInt32 := do
 
   while launchIdx < launches.size || !taskPool.isEmpty do
 
-    -- Launch new tasks up to max concurrency of 8
+    -- Launch new tasks up to configured parallelism
     while taskPool.size < cfg.parallel && launchIdx < launches.size do
       let (cfgArg, task) := launches[launchIdx]!
       logger.log .info s!"Started extractor task {launchIdx} with config {cfgArg}"
@@ -115,7 +134,17 @@ def run (cfg : Config) : IO UInt32 := do
     -- Small sleep to avoid busy-waiting
     IO.sleep 10
 
-  writer.atomically <| get >>= fun w => w.wait
+  let writerCode ← writer.atomically <| get >>= fun w => w.wait
+
+  -- Check if any extractor failed
+  let mut hasFailure := writerCode != 0
+  for (_, res) in results do
+    match res with
+    | .ok code => if code != 0 then hasFailure := true
+    | .error _ => hasFailure := true
+
+  if hasFailure then return 1
+  return 0
 
 where
 
