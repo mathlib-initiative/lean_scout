@@ -1,5 +1,4 @@
 """Helper utilities for testing data extractors."""
-import json
 import subprocess
 from pathlib import Path
 
@@ -10,16 +9,19 @@ TEST_PROJECT_DIR = Path(__file__).parent.parent / "test_project"
 
 def extract_from_dependency_library(command: str, library: str, data_dir: Path,
                                      working_dir: Path, parallel: int = 1) -> Path:
+    # New CLI outputs directly to --dataDir, so we create command subdirectory ourselves
+    # Note: --parquet, --dataDir, --parallel must come before --library because --library consumes all remaining args
+    output_dir = data_dir / command
     subprocess.run(
-        ["lake", "run", "scout", "--command", command, "--dataDir", str(data_dir),
-         "--library", library, "--parallel", str(parallel)],
+        ["lake", "run", "scout", "--command", command, "--parquet",
+         "--dataDir", str(output_dir), "--parallel", str(parallel),
+         "--library", library],
         capture_output=True,
         text=True,
         check=True,
         cwd=str(working_dir)
     )
 
-    output_dir = data_dir / command
     if not output_dir.exists():
         raise RuntimeError(f"{command.capitalize()} directory not created: {output_dir}")
 
@@ -62,19 +64,3 @@ def assert_record_contains(actual, field: str, substring: str):
 def assert_record_not_null(actual, field: str):
     assert field in actual, f"Field '{field}' not found in record"
     assert actual[field] is not None, f"Field '{field}' is None"
-
-
-def get_schema_json(command: str) -> dict:
-    """Query Lean for schema JSON of a given command."""
-    result = subprocess.run(
-        ["lake", "exe", "-q", "lean_scout", "--command", command, "--schema"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    schema_json = result.stdout.strip()
-    if not schema_json:
-        raise RuntimeError(f"No schema output for command '{command}'")
-
-    return json.loads(schema_json)

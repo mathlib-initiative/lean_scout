@@ -10,11 +10,11 @@ To use this tool, you must have:
 
 ## Quickstart
 
-From the root of a Lean4 project that includes `lean_scout`, you can stream the wrapper and run it against one of your libraries (here, `MyLibrary`):
+From the root of a Lean4 project, use the extraction script against one of your libraries (here, `MyLibrary`):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mathlib-initiative/lean_scout/main/extract.py | python3 - --command tactics --library MyLibrary
+curl -fsSL https://raw.githubusercontent.com/mathlib-initiative/lean_scout/main/extract.sh | bash -s -- --command tactics --parquet --library MyLibrary
 ```
-Swap the flags after the script path for any `lean-scout` invocation (e.g., `--read`, `--imports`, `--dataDir`, shard counts). The wrapper reads `lake-manifest.json` and `lean-toolchain` from your current working directory and passes that directory as `--cmdRoot`, so it must be invoked from a Lean4 project root. 
+Swap the flags after `--` for any invocation (e.g., `--parquet`, `--jsonl`, `--read`, `--imports`, `--dataDir`, shard counts). The wrapper reads `lake-manifest.json` and `lean-toolchain` from your current working directory and passes that directory as `--cmdRoot`, so it must be invoked from a Lean4 project root.
 It creates a temporary Lean project with LeanScout and your project as dependencies and runs the LeanScout CLI from there with the appropriate `--cmdRoot`.
 
 ## Basic usage
@@ -23,7 +23,7 @@ To use Lean Scout, add this repo as a dependency in your Lean4 project.
 
 ### Extract from imports
 ```bash
-lake run scout --command types --imports Lean
+lake run scout --command types --parquet --imports Lean
 ```
 
 This will run the `types` command to extract types of constants from an environment created by importing the `Lean` module.
@@ -31,34 +31,30 @@ This will run the `types` command to extract types of constants from an environm
 ### Extract from files
 ```bash
 # Single file
-lake run scout --command tactics --read MyFile.lean
+lake run scout --command tactics --parquet --read MyFile.lean
 
 # Multiple files in parallel (one subprocess per file)
-lake run scout --command tactics --read File1.lean File2.lean File3.lean --parallel 4
+lake run scout --command tactics --parquet --parallel 4 --read File1.lean File2.lean File3.lean
 
 # Extract from entire library (recommended for large codebases)
-lake run scout --command tactics --library LeanScoutTest --parallel 8
+lake run scout --command tactics --parquet --parallel 8 --library LeanScoutTest
 
-# Or use a file list
-echo "File1.lean" > file_list.txt
-echo "File2.lean" >> file_list.txt
-lake run scout --command tactics --readList file_list.txt --parallel 8
 ```
 
 If you have Lean Scout as a dependency with `Mathlib` as another dependency, you can similarly run:
 ```bash
-lake run scout --command types --imports Mathlib
+lake run scout --command types --parquet --imports Mathlib
 ```
 
-In both cases, the data will be written to `parquet` files in the `types` subdirectory of your Lean4 project. 
+In both cases, the data will be written to `parquet` files in the `types` subdirectory of your Lean4 project.
 You can specify the base directory where data is stored as follows:
 ```bash
-lake run scout --command types --dataDir $HOME/storage --imports Mathlib
+lake run scout --command types --parquet --dataDir $HOME/storage --imports Mathlib
 ```
 
 This will write the data to files located within the `$HOME/storage/types` directory.
 
-By default Lean Scout resolves both outputs and relative read targets from the directory where you invoke the command (`--cmdRoot`, default: current working directory). If you run via a wrapper script or from outside the Lean project root, pass `--cmdRoot /path/to/where/paths/are/relative` so relative `--read`/`--readList` paths and outputs stay anchored to that location.
+By default Lean Scout resolves both outputs and relative read targets from the directory where you invoke the command (`--cmdRoot`, default: current working directory). If you run via a wrapper script or from outside the Lean project root, pass `--cmdRoot /path/to/where/paths/are/relative` so relative `--read` paths and outputs stay anchored to that location.
 
 If you stop an extraction early (for example with `Ctrl+C`), Lean Scout leaves the partially written Parquet directory on disk; rerunning with the same `--command` and `--dataDir` will fail with a "Data directory … already exists" error. Remove the previous output directory or point `--dataDir` to a fresh location before retrying.
 If the extraction exits because of an error, Lean Scout removes the partially written directory for you; manual cleanup is only required when you interrupt the run yourself.
@@ -76,22 +72,20 @@ Lean Scout supports multiple extraction modes:
 
 1. **`--imports`**: Extract from an environment created by importing modules (single subprocess)
    - Best for: Extracting types, declarations, or other environment-level data
-   - Example: `lake run scout --command types --imports Lean`
+   - Example: `lake run scout --command types --parquet --imports Lean`
 
 2. **`--read`**: Extract from specific files (parallel subprocesses, one per file)
    - Best for: Processing specific files with per-file data extraction
-   - Example: `lake run scout --command tactics --read File1.lean File2.lean --parallel 4`
+   - Example: `lake run scout --command tactics --parquet --parallel 4 --read File1.lean File2.lean`
 
 3. **`--library`**: Extract from all modules in a library (parallel subprocesses, recommended)
    - Best for: Processing entire libraries or large codebases
    - Uses `lake query -q <library>:module_paths` to automatically discover all module files
-   - Example: `lake run scout --command tactics --library LeanScoutTest --parallel 8`
-
-4. **`--readList`**: Extract from files listed in a text file (parallel subprocesses)
-   - Best for: Custom file lists or integration with build systems
-   - Example: `lake run scout --command tactics --readList my_files.txt --parallel 8`
+   - Example: `lake run scout --command tactics --parquet --parallel 8 --library LeanScoutTest`
 
 **Note**: The `--library` flag is the recommended approach for extracting data from entire libraries, as it automatically discovers all modules without requiring manual file management.
+
+**Important**: The target flags (`--imports`, `--library`, `--read`) consume all remaining command-line arguments. Place other flags like `--parquet`, `--jsonl`, `--parallel`, `--dataDir` before the target specification.
 
 ## Sharding
 
@@ -99,7 +93,7 @@ By default, data is organized into 128 parquet shards.
 The shard associated with a datapoint is computed by hashing a key, which is specified directly in each data extractor.
 The number of shards used can be controlled with the `--numShards` option:
 ```bash
-lake run scout --command types --numShards 32 --imports Lean
+lake run scout --command types --parquet --numShards 32 --imports Lean
 ```
 
 ## Available Data Extractors
@@ -113,7 +107,7 @@ Extracts constant declarations with their types and modules.
 
 **Example**:
 ```bash
-lake run scout --command types --imports Lean
+lake run scout --command types --parquet --imports Lean
 ```
 
 **Output schema**:
@@ -124,11 +118,11 @@ lake run scout --command types --imports Lean
 ### `tactics`
 Extracts tactic invocations with goal states, used constants, elaborator info, and syntax kinds.
 
-**Supported modes**: `--read`, `--readList`, `--library`
+**Supported modes**: `--read`, `--library`
 
 **Example**:
 ```bash
-lake run scout --command tactics --library LeanScoutTest --parallel 4
+lake run scout --command tactics --parquet --parallel 4 --library LeanScoutTest
 ```
 
 **Output schema**:
@@ -147,9 +141,9 @@ lake run scout --command extractors
 ## Creating datasets
 
 It is straightforward to create a dataset (in the sense of `datasets`) from a list of parquet files.
-For example, once you run 
+For example, once you run
 ```bash
-lake run scout --command types --imports Lean
+lake run scout --command types --parquet --imports Lean
 ```
 to create `parquet` files of the form `types/*.parquet`, a dataset can be created in python as follows (see `data.ipynb`):
 ```python
@@ -167,21 +161,23 @@ dataset = load_dataset("parquet", data_dir="types", split="train")
 
 # How does LeanScout work?
 
-1. Python orchestrates one or more Lean subprocess(es) that extract data and output JSON lines to stdout
-2. The Python orchestrator reads JSON from each subprocess and writes to a shared pool of Parquet writers, or to stdout in the case of `--jsonl`.
+1. The Lean orchestrator (`Main.lean`) manages one or more Lean subprocess(es) that extract data and output JSON lines to stdout
+2. For `--parquet` output, the orchestrator spawns a Python process (`parquet_writer_cli.py`) that reads JSON from stdin and writes to Parquet files
+3. For `--jsonl` output, the orchestrator writes JSON directly to stdout
 
-The main Python CLI is written in `src/lean_scout/cli.py`.
+The orchestration logic is implemented in `Main.lean`, with the Parquet writing handled by `src/lean_scout/parquet_writer_cli.py`.
 
 # Testing
 
 ### Running Tests
 
 ```bash
-# Run all tests (all three phases)
+# Run all tests (all four phases)
 ./run_tests
 
 # Run individual phases
-lake test                         # Phase 0: Lean schema tests only
-uv run pytest test/internals/ -v  # Phase 1: Infrastructure tests only
-uv run pytest test/extractors/ -v # Phase 2: Extractor tests only
+lake test                                        # Phase 0: Lean schema tests
+uv run pytest test/internals/ -v                 # Phase 1: Python parquet writer tests
+./test/integration/test_lean_orchestrator.sh    # Phase 2: Lean orchestrator integration tests
+uv run pytest test/extractors/ -v                # Phase 3: End-to-end extractor tests
 ```

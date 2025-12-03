@@ -23,15 +23,17 @@ from helpers import (
 
 
 def extract_from_dependency_types(library: str, data_dir: Path, working_dir: Path) -> Path:
+    # New CLI outputs directly to --dataDir, so we create types subdirectory ourselves
+    types_dir = data_dir / "types"
     subprocess.run(
-        ["lake", "run", "scout", "--command", "types", "--dataDir", str(data_dir), "--imports", library],
+        ["lake", "run", "scout", "--command", "types", "--parquet",
+         "--dataDir", str(types_dir), "--imports", library],
         capture_output=True,
         text=True,
         check=True,
         cwd=str(working_dir)
     )
 
-    types_dir = data_dir / "types"
     if not types_dir.exists():
         raise RuntimeError(f"Types directory not created: {types_dir}")
 
@@ -151,8 +153,9 @@ def test_types_imports_modules(types_dataset_imports):
 
 def extract_types_jsonl(library: str, working_dir: Path) -> list[dict[str, Any]]:
     """Extract types using --jsonl flag and return parsed records."""
+    # Note: --jsonl must come before --imports because --imports consumes all remaining args
     result = subprocess.run(
-        ["lake", "run", "scout", "--command", "types", "--imports", library, "--jsonl"],
+        ["lake", "run", "scout", "--command", "types", "--jsonl", "--imports", library],
         capture_output=True,
         text=True,
         check=True,
@@ -207,9 +210,10 @@ def test_types_jsonl_no_output_directory_created():
     with tempfile.TemporaryDirectory() as tmpdir:
         data_dir = Path(tmpdir)
 
+        # Note: --jsonl and --dataDir must come before --imports
         subprocess.run(
-            ["lake", "run", "scout", "--command", "types", "--imports",
-             "LeanScoutTestProject", "--jsonl", "--dataDir", str(data_dir)],
+            ["lake", "run", "scout", "--command", "types", "--jsonl",
+             "--dataDir", str(data_dir), "--imports", "LeanScoutTestProject"],
             capture_output=True,
             text=True,
             check=True,
@@ -222,9 +226,10 @@ def test_types_jsonl_no_output_directory_created():
 
 def test_types_jsonl_logs_to_stderr():
     """Verify logs go to stderr, not stdout."""
+    # Note: --jsonl must come before --imports
     result = subprocess.run(
-        ["lake", "run", "scout", "--command", "types", "--imports",
-         "LeanScoutTestProject", "--jsonl"],
+        ["lake", "run", "scout", "--command", "types", "--jsonl",
+         "--imports", "LeanScoutTestProject"],
         capture_output=True,
         text=True,
         check=True,
@@ -236,6 +241,7 @@ def test_types_jsonl_logs_to_stderr():
         if line:
             json.loads(line)
 
-    assert "Querying schema" in result.stderr or "Extraction complete" in result.stderr, \
+    # New Lean logger format: "2025-12-03T16:06:48Z [INFO] Started extractor task..."
+    assert "[INFO]" in result.stderr or "[ERROR]" in result.stderr, \
         "Log messages should appear in stderr"
 

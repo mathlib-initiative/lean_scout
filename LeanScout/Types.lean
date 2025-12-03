@@ -1,6 +1,8 @@
 module
 
 public import Lean
+public import Std.Time.Zoned
+public import Std.Time.Format
 
 public section
 
@@ -32,18 +34,18 @@ deriving BEq
 
 open Lean
 
-structure BaseTarget where
-  opts : Options
-
-structure ImportsTarget extends BaseTarget where
+structure ImportsTarget where
   imports : Array Import
+deriving ToJson, FromJson
 
-structure InputTarget extends BaseTarget where
+structure InputTarget where
   path : System.FilePath
+deriving ToJson, FromJson
 
 inductive Target where
   | imports (imports : ImportsTarget)
   | input (input : InputTarget)
+deriving ToJson, FromJson
 
 /--
 A `DataExtractor` bundles together the following data:
@@ -75,6 +77,22 @@ See `LeanScout.DataExtractors.types` for an example.
 structure DataExtractor where
   schema : Schema
   key : String
-  go : (Json → IO Unit) → Target → IO Unit
+  go : (Json → IO Unit) → Options → Target → IO Unit
+
+inductive Severity where
+  | debug
+  | info
+  | warning
+  | error
+deriving Ord
+
+instance : ToString Severity where toString
+  | .debug => "DEBUG"
+  | .info  => "INFO"
+  | .warning => "WARNING"
+  | .error => "ERROR"
+
+structure Logger where
+  log : Severity → String → IO Unit
 
 end LeanScout

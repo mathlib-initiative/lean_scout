@@ -210,9 +210,10 @@ def test_tactics_rfl_from_test_project(tactics_dataset):
 
 def extract_tactics_jsonl(library: str, working_dir: Path) -> list[dict[str, Any]]:
     """Extract tactics using --jsonl flag and return parsed records."""
+    # Note: --jsonl and --parallel must come before --library because --library consumes all remaining args
     result = subprocess.run(
-        ["lake", "run", "scout", "--command", "tactics", "--library", library,
-         "--parallel", "1", "--jsonl"],
+        ["lake", "run", "scout", "--command", "tactics", "--jsonl",
+         "--parallel", "1", "--library", library],
         capture_output=True,
         text=True,
         check=True,
@@ -256,10 +257,11 @@ def test_tactics_jsonl_no_output_directory_created():
     with tempfile.TemporaryDirectory() as tmpdir:
         data_dir = Path(tmpdir)
 
+        # Note: --jsonl, --parallel, --dataDir must come before --library
         subprocess.run(
-            ["lake", "run", "scout", "--command", "tactics", "--library",
-             "LeanScoutTestProject", "--parallel", "1", "--jsonl",
-             "--dataDir", str(data_dir)],
+            ["lake", "run", "scout", "--command", "tactics", "--jsonl",
+             "--parallel", "1", "--dataDir", str(data_dir),
+             "--library", "LeanScoutTestProject"],
             capture_output=True,
             text=True,
             check=True,
