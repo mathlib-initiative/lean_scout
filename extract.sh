@@ -19,6 +19,8 @@ CALLER_ROOT="$ROOT"
 MANIFEST_PATH="$ROOT/lake-manifest.json"
 LEAN_TOOLCHAIN_FILE="$ROOT/lean-toolchain"
 
+echo "==> Reading project configuration..."
+
 # Read lean-toolchain
 if [ ! -f "$LEAN_TOOLCHAIN_FILE" ]; then
     echo "lean-toolchain not found at $LEAN_TOOLCHAIN_FILE" >&2
@@ -51,6 +53,11 @@ if [ -z "$PKG_NAME" ]; then
     exit 1
 fi
 
+echo "    Package: $PKG_NAME"
+echo "    Lean version: $LEAN_VERSION"
+
+echo "==> Creating temporary subproject..."
+
 # Create temporary directory
 SUBPROJECT_DIR=$(mktemp -d -t lean_scout_subproject_XXXXXX)
 trap "rm -rf $SUBPROJECT_DIR" EXIT
@@ -79,9 +86,9 @@ echo "$LEAN_TOOLCHAIN" > "$SUBPROJECT_DIR/lean-toolchain"
 # Set environment to disable Mathlib cache updates
 export MATHLIB_NO_CACHE_ON_UPDATE=1
 
-# Build lean_scout
+echo "==> Building lean_scout..."
 cd "$SUBPROJECT_DIR"
 lake build -q lean_scout
 
-# Run scout with user arguments
+echo "==> Running extraction..."
 lake run scout --cmdRoot "$CALLER_ROOT" "$@"

@@ -11,4 +11,8 @@ public def logger : Logger where
     stderr.putStrLn s!"{t} [{s}] {msg}"
     stderr.flush
 
+public def logError (s : α) [ToString α] := logger.log .error (toString s)
+public def logInfo (s : α) [ToString α] := logger.log .info (toString s)
+public def logDebug (s : α) [ToString α] := logger.log .debug (toString s)
+
 end LeanScout

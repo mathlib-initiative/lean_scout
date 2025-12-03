@@ -119,12 +119,12 @@ unsafe
 def run (cfg : Config) : IO UInt32 := do
   let targets ← match ← cfg.targetSpec.toTargets.run with
     | .ok tgts => pure tgts
-    | .error err => logger.log .error err ; return 1
+    | .error err => logError err ; return 1
 
   let extractorCfgs : Array Extractor.Config := targets.map fun tgt => ⟨cfg.command, tgt⟩
 
   let some extractor := (data_extractors).get? cfg.command
-    | logger.log .error s!"No data extractor found for command '{cfg.command}'" ; return 1
+    | logError s!"No data extractor found for command '{cfg.command}'" ; return 1
 
   let writer : Std.Mutex Writer ← Std.Mutex.new <| ← match cfg.writerSpec with
   | .jsonl => jsonlWriter
@@ -148,7 +148,7 @@ def run (cfg : Config) : IO UInt32 := do
     -- Launch new tasks up to configured parallelism
     while taskPool.size < cfg.parallel && launchIdx < launches.size do
       let (cfgArg, task) := launches[launchIdx]!
-      logger.log .info s!"Started extractor task {launchIdx} with config {cfgArg}"
+      logInfo s!"Started extractor task {launchIdx} with config {cfgArg}"
       taskPool := taskPool.insert launchIdx (← task)
       launchIdx := launchIdx + 1
 
@@ -157,8 +157,8 @@ def run (cfg : Config) : IO UInt32 := do
       if ← IO.hasFinished task then
         let res ← IO.wait task
         match res with
-        | .ok code => logger.log .info s!"Extractor task {idx} finished with exit code {code}"
-        | .error err => logger.log .error s!"Extractor task {idx} failed with error: {err}"
+        | .ok code => logInfo s!"Extractor task {idx} finished with exit code {code}"
+        | .error err => logError s!"Extractor task {idx} failed with error: {err}"
         results := results.insert idx res
         taskPool := taskPool.erase idx
 
@@ -221,4 +221,4 @@ open LeanScout Orchestrator in
 public unsafe def main (args : List String) : IO UInt32 := do
   match parseArgs args with
   | .ok cfg => run cfg
-  | .error err => logger.log .error err ; return 1
+  | .error err => logError err ; return 1
