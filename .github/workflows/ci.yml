@@ -27,6 +27,10 @@ jobs:
       - name: Build Lean project
         run: lake build
 
+      - name: Build test project
+        run: lake build
+        working-directory: test_project
+
       - name: Run tests
         run: ./run_tests
 

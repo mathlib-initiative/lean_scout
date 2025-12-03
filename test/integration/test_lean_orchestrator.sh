@@ -135,11 +135,11 @@ echo "Output Formats:"
 
 # Test JSONL outputs valid JSON
 set +e
-full_output=$(lake run scout --command types --jsonl --imports LeanScoutTestProject 2>&1)
-output=$(echo "$full_output" | grep -v '^\[' | head -1)  # Filter out log lines starting with [
+output=$(lake run scout --command types --jsonl --imports LeanScoutTestProject 2>/dev/null | head -1)
 if echo "$output" | python3 -c "import sys, json; json.loads(sys.stdin.read())" 2>/dev/null; then
     pass "JSONL outputs valid JSON"
 else
+    full_output=$(lake run scout --command types --jsonl --imports LeanScoutTestProject 2>&1 | head -20)
     fail "JSONL outputs valid JSON" "$full_output"
 fi
 set -e
