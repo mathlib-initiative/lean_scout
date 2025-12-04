@@ -17,6 +17,74 @@ curl -fsSL mathlib-initiative.github.io/lean_scout/extract.sh | bash -s -- --com
 Swap the flags after `--` for any invocation (e.g., `--parquet`, `--jsonl`, `--read`, `--imports`, `--dataDir`, shard counts). The wrapper reads `lake-manifest.json` and `lean-toolchain` from your current working directory and passes that directory as `--cmdRoot`, so it must be invoked from a Lean4 project root.
 It creates a temporary Lean project with LeanScout and your project as dependencies and runs the LeanScout CLI from there with the appropriate `--cmdRoot`.
 
+## Github action
+
+The script `extract.sh` can be used to easily set up a Github action that extracts data from a Lean4 project and uploads it to huggingface.
+Here is an example of such a script:
+```yml
+name: Upload Lean dataset to HuggingFace Hub
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HF_DATASET_NAME: my-dataset
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: leanprover/lean-action@v1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Create temp directory
+        id: tempdir
+        run: echo "path=$(mktemp -d)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate parquet files
+        run: |
+          curl -fsSL mathlib-initiative.github.io/lean_scout/extract.sh | bash -s -- \
+            --command types \
+            --parquet \
+            --dataDir "${{ steps.tempdir.outputs.path }}" \
+            --imports MyLeanModule
+
+      - name: Verify parquet files exist
+        run: |
+          if ! ls "${{ steps.tempdir.outputs.path }}"/*.parquet 1>/dev/null 2>&1; then
+            echo "::error::No parquet files were generated"
+            exit 1
+          fi
+          echo "Generated data:"
+          ls -lh "${{ steps.tempdir.outputs.path }}"/*.parquet
+
+      - name: Upload to HuggingFace Hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          uvx hf upload \
+            "${{ env.HF_DATASET_NAME }}" \
+            "${{ steps.tempdir.outputs.path }}" \
+            --repo-type dataset \
+            --private \
+            --commit-message "Update dataset from ${{ github.sha }}" \
+            --revision "${{ github.sha }}"
+```
+To use this in your own Lean4 project on Github, you must:
+- Set up your huggingface (writing) token as a repo secret under `HF_TOKEN`.
+- Change `HF_DATASET_NAME: my-dataset` to the name of the dataset you want to save.
+- Change the parameters passed to the extraction script. The current options will extract data about types contained in the environment obtained by importing `MyLeanModule`.
+
 ## Basic usage
 
 To use Lean Scout, add this repo as a dependency in your Lean4 project.
