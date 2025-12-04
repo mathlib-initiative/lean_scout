@@ -49,10 +49,11 @@ lake run scout --command types --parquet --imports Mathlib
 In both cases, the data will be written to `parquet` files in the `types` subdirectory of your Lean4 project.
 You can specify the base directory where data is stored as follows:
 ```bash
-lake run scout --command types --parquet --dataDir $HOME/storage --imports Mathlib
+lake run scout --command types --parquet --dataDir $HOME/storage/types --imports Mathlib
 ```
 
-This will write the data to files located within the `$HOME/storage/types` directory.
+This will write the data to files located within the `$HOME/storage/types/` directory.
+The default location is `./data/`
 
 By default Lean Scout resolves both outputs and relative read targets from the directory where you invoke the command (`--cmdRoot`, default: current working directory). If you run via a wrapper script or from outside the Lean project root, pass `--cmdRoot /path/to/where/paths/are/relative` so relative `--read` paths and outputs stay anchored to that location.
 
@@ -145,18 +146,18 @@ For example, once you run
 ```bash
 lake run scout --command types --parquet --imports Lean
 ```
-to create `parquet` files of the form `types/*.parquet`, a dataset can be created in python as follows (see `data.ipynb`):
+to create `parquet` files of the form `./data/*.parquet`, a dataset can be created in python as follows (see `data.ipynb`):
 ```python
 from datasets import Dataset
 import glob
 
-dataset = Dataset.from_parquet(glob.glob("types/*.parquet"))
+dataset = Dataset.from_parquet(glob.glob("./data/*.parquet"))
 ```
 or as follows:
 ```python
 from datasets import load_dataset
 
-dataset = load_dataset("parquet", data_dir="types", split="train")
+dataset = load_dataset("parquet", data_dir="./data", split="train")
 ```
 
 # How does LeanScout work?
