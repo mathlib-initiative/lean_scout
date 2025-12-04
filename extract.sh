@@ -86,6 +86,9 @@ echo "$LEAN_TOOLCHAIN" > "$SUBPROJECT_DIR/lean-toolchain"
 # Set environment to disable Mathlib cache updates
 export MATHLIB_NO_CACHE_ON_UPDATE=1
 
+echo "==> Building project..."
+lake build -q
+
 echo "==> Building lean_scout..."
 cd "$SUBPROJECT_DIR"
 lake build -q lean_scout
