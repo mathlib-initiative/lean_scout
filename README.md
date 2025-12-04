@@ -78,7 +78,6 @@ jobs:
             --repo-type dataset \
             --private \
             --commit-message "Update dataset from ${{ github.sha }}" \
-            --revision "${{ github.sha }}"
 ```
 To use this in your own Lean4 project on Github, you must:
 - Set up your huggingface (writing) token as a repo secret under `HF_TOKEN`.
