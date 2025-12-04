@@ -12,7 +12,7 @@ To use this tool, you must have:
 
 From the root of a Lean4 project, use the extraction script against one of your libraries (here, `MyLibrary`):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mathlib-initiative/lean_scout/main/extract.sh | bash -s -- --command tactics --parquet --library MyLibrary
+curl -fsSL mathlib-initiative.github.io/lean_scout/extract.sh | bash -s -- --command tactics --parquet --library MyLibrary
 ```
 Swap the flags after `--` for any invocation (e.g., `--parquet`, `--jsonl`, `--read`, `--imports`, `--dataDir`, shard counts). The wrapper reads `lake-manifest.json` and `lean-toolchain` from your current working directory and passes that directory as `--cmdRoot`, so it must be invoked from a Lean4 project root.
 It creates a temporary Lean project with LeanScout and your project as dependencies and runs the LeanScout CLI from there with the appropriate `--cmdRoot`.
