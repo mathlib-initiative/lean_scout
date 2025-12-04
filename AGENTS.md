@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 - Lean source lives under `LeanScout/` (core library) and `LeanScoutTest/` (fixtures); entrypoint binary is `Main.lean`.
-- Python parquet writer code is in `src/lean_scout/` (`writer.py`, `parquet_writer_cli.py`); packaged via `pyproject.toml`.
+- Python parquet writer code is in `src/lean_scout/` (`parquet_writer.py`, `cli.py`); packaged via `pyproject.toml`.
 - Tests are split by layer: Lean schema checks via `lake test`; Python parquet writer tests in `test/internals/`; Lean orchestrator integration tests in `test/integration/`; end-to-end extractor tests plus fixtures in `test/extractors/` and `test/fixtures/`. Sample Lean project for integration lives in `test_project/`.
 - Generated parquet outputs and temporary shards should stay out of version control; configure outputs with `--dataDir` when running commands and use `--cmdRoot` to anchor relative inputs/outputs to the invocation directory when calling from wrappers.
 
@@ -39,7 +39,7 @@ lake run scout --command types --parquet --imports Lean  # Example extractor inv
 ## Project Overview
 Lean Scout creates datasets from Lean4 projects by extracting structured data (types, tactics) into sharded Parquet outputs.
 
-**Architecture:** Lean orchestrator (`Main.lean`) drives Lean subprocesses that emit JSON; for Parquet output, a Python subprocess (`parquet_writer_cli.py`) ingests the JSON and writes to sharded Parquet files; for JSONL output, the Lean orchestrator writes directly to stdout.
+**Architecture:** Lean orchestrator (`Main.lean`) drives Lean subprocesses that emit JSON; for Parquet output, a Python subprocess (`cli.py`) ingests the JSON and writes to sharded Parquet files; for JSONL output, the Lean orchestrator writes directly to stdout.
 
 ## Requirements
 - Lean4 via `elan`/`lake`/`lean` (tracked in `lean-toolchain`: `v4.26.0-rc1`)

@@ -7,11 +7,11 @@ Architecture:
     The orchestrator feeds JSON to a writer.
 """
 
+from .parquet_writer import ShardedParquetWriter
 from .utils import (
     deserialize_schema,
     stream_json_lines,
 )
-from .writer import ShardedParquetWriter
 
 __all__ = [
     "ShardedParquetWriter",

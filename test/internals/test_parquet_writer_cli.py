@@ -11,7 +11,7 @@ from unittest import mock
 import pyarrow.parquet as pq
 import pytest
 
-from lean_scout.parquet_writer_cli import main
+from lean_scout.cli import main
 
 
 class TestParquetWriterCliUnit:

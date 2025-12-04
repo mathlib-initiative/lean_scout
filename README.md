@@ -162,10 +162,10 @@ dataset = load_dataset("parquet", data_dir="types", split="train")
 # How does LeanScout work?
 
 1. The Lean orchestrator (`Main.lean`) manages one or more Lean subprocess(es) that extract data and output JSON lines to stdout
-2. For `--parquet` output, the orchestrator spawns a Python process (`parquet_writer_cli.py`) that reads JSON from stdin and writes to Parquet files
+2. For `--parquet` output, the orchestrator spawns a Python process (`cli.py`) that reads JSON from stdin and writes to Parquet files
 3. For `--jsonl` output, the orchestrator writes JSON directly to stdout
 
-The orchestration logic is implemented in `Main.lean`, with the Parquet writing handled by `src/lean_scout/parquet_writer_cli.py`.
+The orchestration logic is implemented in `Main.lean`, with the Parquet writing handled by `src/lean_scout/cli.py`.
 
 # Testing
 

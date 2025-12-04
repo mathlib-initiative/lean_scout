@@ -17,7 +17,7 @@ import pyarrow as pa
 import pytest
 from datasets import Dataset
 
-from lean_scout.writer import ShardedParquetWriter
+from lean_scout.parquet_writer import ShardedParquetWriter
 
 
 @pytest.fixture

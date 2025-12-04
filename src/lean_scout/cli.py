@@ -3,8 +3,8 @@
 import argparse
 import sys
 
+from .parquet_writer import ShardedParquetWriter
 from .utils import deserialize_schema, stream_json_lines
-from .writer import ShardedParquetWriter
 
 
 def main() -> None:
