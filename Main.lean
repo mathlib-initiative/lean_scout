@@ -138,6 +138,8 @@ where
 
 go (writer : Writer) (extractorCfgs : Array Extractor.Config) : IO UInt32 := do
 
+  logInfo s!"Starting data extraction with {extractorCfgs.size} extractor configurations"
+
   let writer : Std.Mutex Writer ← Std.Mutex.new <| writer
 
   let mut launches : Array (String × IO (Task <| Except IO.Error UInt32)) := #[]
@@ -148,6 +150,8 @@ go (writer : Writer) (extractorCfgs : Array Extractor.Config) : IO UInt32 := do
     ]
     let task := subprocessLines "lake" args fun s => writer.atomically get >>= fun w => w.sink s
     launches := launches.push (cfgArg, task)
+
+  logInfo s!"Launching {launches.size} extractor tasks"
 
   let mut taskPool : Std.HashMap Nat (Task <| Except IO.Error UInt32) := {}
   let mut launchIdx := 0
@@ -200,6 +204,7 @@ parquetWriter (cfg : Config) (extractor : DataExtractor) : ExceptT String IO Wri
     let entries ← cfg.dataDir.readDir
     unless entries.isEmpty do
       throw <| s!"Output directory '{cfg.dataDir}' already exists and is not empty"
+  logInfo s!"Creating output directory '{cfg.dataDir}'"
   IO.FS.createDirAll cfg.dataDir
   let dataDir ← IO.FS.realPath cfg.dataDir
   let subprocess ← IO.Process.spawn {
