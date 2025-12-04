@@ -126,9 +126,19 @@ def run (cfg : Config) : IO UInt32 := do
   let some extractor := (data_extractors).get? cfg.command
     | logError s!"No data extractor found for command '{cfg.command}'" ; return 1
 
-  let writer : Std.Mutex Writer ← Std.Mutex.new <| ← match cfg.writerSpec with
+  let writer? ← match cfg.writerSpec with
   | .jsonl => jsonlWriter
   | .parquet => parquetWriter cfg extractor
+
+  match writer? with
+  | .ok writer => go writer extractorCfgs
+  | .error e => logError e ; return 1
+
+where
+
+go (writer : Writer) (extractorCfgs : Array Extractor.Config) : IO UInt32 := do
+
+  let writer : Std.Mutex Writer ← Std.Mutex.new <| writer
 
   let mut launches : Array (String × IO (Task <| Except IO.Error UInt32)) := #[]
   for extractorCfg in extractorCfgs do
@@ -177,9 +187,7 @@ def run (cfg : Config) : IO UInt32 := do
   if hasFailure then return 1
   return 0
 
-where
-
-jsonlWriter : IO Writer := return {
+jsonlWriter : ExceptT String IO Writer := return {
   wait := return 0,
   sink := fun s => do
     let stdout ← IO.getStdout
@@ -187,7 +195,11 @@ jsonlWriter : IO Writer := return {
     stdout.flush
 }
 
-parquetWriter (cfg : Config) (extractor : DataExtractor) : IO Writer := do
+parquetWriter (cfg : Config) (extractor : DataExtractor) : ExceptT String IO Writer := do
+  if ← cfg.dataDir.pathExists then
+    let entries ← cfg.dataDir.readDir
+    unless entries.isEmpty do
+      throw <| s!"Output directory '{cfg.dataDir}' already exists and is not empty"
   IO.FS.createDirAll cfg.dataDir
   let dataDir ← IO.FS.realPath cfg.dataDir
   let subprocess ← IO.Process.spawn {
