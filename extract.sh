@@ -87,11 +87,12 @@ echo "$LEAN_TOOLCHAIN" > "$SUBPROJECT_DIR/lean-toolchain"
 export MATHLIB_NO_CACHE_ON_UPDATE=1
 
 echo "==> Building project..."
-lake build -q
+lake build
 
-echo "==> Building lean_scout..."
+echo "==> Building lean_scout executables..."
 cd "$SUBPROJECT_DIR"
-lake build -q lean_scout
+lake build lean_scout_extractor:exe
+lake build lean_scout:exe
 
 echo "==> Running extraction..."
 lake run scout --cmdRoot "$CALLER_ROOT" "$@"
