@@ -51,7 +51,7 @@ Lean Scout creates datasets from Lean4 projects by extracting structured data (t
 - List extractors: `lake run scout --command extractors`
 - Imports target (single subprocess):
   - `lake run scout --command types --parquet --imports Lean`
-  - `lake run scout --command types --parquet --dataDir $HOME/storage --imports Mathlib`
+  - `lake run scout --command types --parquet --dataDir $HOME/storage/types --imports Mathlib`
   - Sharding: `--numShards 32`
 - Read targets (parallel):
   - `lake run scout --command tactics --parquet --read MyFile.lean`
@@ -85,10 +85,10 @@ Four-phase suite: Lean schema roundtrips, Python parquet writer, Lean orchestrat
 ```python
 from datasets import Dataset
 import glob
-dataset = Dataset.from_parquet(glob.glob("types/*.parquet"))
+dataset = Dataset.from_parquet(glob.glob("./data/*.parquet"))
 ```
 or:
 ```python
 from datasets import load_dataset
-dataset = load_dataset("parquet", data_dir="types", split="train")
+dataset = load_dataset("parquet", data_dir="./data", split="train")
 ```

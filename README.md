@@ -46,7 +46,7 @@ If you have Lean Scout as a dependency with `Mathlib` as another dependency, you
 lake run scout --command types --parquet --imports Mathlib
 ```
 
-In both cases, the data will be written to `parquet` files in the `types` subdirectory of your Lean4 project.
+In both cases, the data will be written to `parquet` files in the `./data/` subdirectory of your Lean4 project.
 You can specify the base directory where data is stored as follows:
 ```bash
 lake run scout --command types --parquet --dataDir $HOME/storage/types --imports Mathlib
