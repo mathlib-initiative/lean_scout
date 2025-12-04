@@ -77,7 +77,7 @@ See `LeanScout.DataExtractors.types` for an example.
 structure DataExtractor where
   schema : Schema
   key : String
-  go : (Json → IO Unit) → Options → Target → IO Unit
+  go : Json → (Json → IO Unit) → Options → Target → IO Unit
 
 inductive Severity where
   | debug

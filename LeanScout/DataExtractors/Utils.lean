@@ -18,7 +18,6 @@ def declNameFilter {m} [Monad m] [MonadEnv m] (declName : Name) : m Bool := do
   if declName matches .str _ "recOn" then return true
   if declName matches .str _ "sizeOf_spec" then return true
   if declName matches .str _ "brecOn" then return true
-  if declName matches .str _ "recOn" then return true
   if declName matches .str _ "casesOn" then return true
   if declName matches .str _ "toCtorIdx" then return true
   if declName matches .str _ "noConfusionType" then return true

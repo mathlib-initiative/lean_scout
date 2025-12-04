@@ -11,6 +11,7 @@ namespace Extractor
 public structure Config where
   command : Command
   target : Target
+  extractorConfig : Json := Json.mkObj []
 deriving ToJson, FromJson
 
 public unsafe
@@ -21,7 +22,7 @@ def extract (cfg : Config): IO UInt32 := do
   let sink (j : Json) : IO Unit := do
     stdout.putStrLn j.compress
     stdout.flush
-  extractor.go sink {} cfg.target
+  extractor.go cfg.extractorConfig sink {} cfg.target
   return 0
 
 end Extractor
