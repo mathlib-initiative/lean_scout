@@ -88,6 +88,29 @@ Lean Scout supports multiple extraction modes:
 
 **Important**: The target flags (`--imports`, `--library`, `--read`) consume all remaining command-line arguments. Place other flags like `--parquet`, `--jsonl`, `--parallel`, `--dataDir` before the target specification.
 
+## Extractor Configuration
+
+Extractors can be configured using the `--config` flag, which accepts a JSON object:
+
+```bash
+lake run scout --config '{"filter": true}' --command types --parquet --imports Lean
+```
+
+### Available Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `filter` | boolean | `false` | When `true`, filters out internal/auto-generated declarations (for `types`) or common tactic syntax nodes (for `tactics`) |
+
+**Examples**:
+```bash
+# Enable filtering to exclude internal declarations
+lake run scout --config '{"filter": true}' --command types --parquet --imports Lean
+
+# Disable filtering to get all tactic nodes (default behavior)
+lake run scout --config '{"filter": false}' --command tactics --parquet --library MyLib
+```
+
 ## Sharding
 
 By default, data is organized into 128 parquet shards. 
@@ -116,6 +139,9 @@ lake run scout --command types --parquet --imports Lean
 - `module` (string, nullable): Module containing the constant
 - `type` (string): Type signature
 
+**Configuration**:
+- `filter` (default: `false`): When `true`, excludes internal declarations like recursors, `noConfusion`, matchers, and other auto-generated constants
+
 ### `tactics`
 Extracts tactic invocations with goal states, used constants, elaborator info, and syntax kinds.
 
@@ -133,6 +159,9 @@ lake run scout --command tactics --parquet --parallel 4 --library LeanScoutTest
 - `ppTac` (string): Pretty-printed tactic syntax
 - `elaborator` (string): Name of the elaborator that produced this tactic
 - `kind` (string): Non-null syntax node kind for the tactic
+
+**Configuration**:
+- `filter` (default: `false`): When `true`, excludes common structural tactic nodes like `byTactic`, `tacticSeq`, identifiers, and punctuation
 
 ### List all extractors
 ```bash

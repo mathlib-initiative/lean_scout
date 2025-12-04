@@ -21,31 +21,35 @@ public unsafe def tactics : DataExtractor where
     { name := "kind", nullable := false, type := .string },
   ]
   key := "ppTac"
-  go sink opts
-  | .input tgt => discard <| tgt.withVisitM opts (α := Unit) (ctx? := none)
-    (fun _ _ _ => return true) fun ctxInfo info _ _ => ctxInfo.runMetaM' {} do
-      let .ofTacticInfo info := info | return
-      let some (.original ..) := info.stx.getHeadInfo? | return
-      let kind := info.stx.getKind
-      if tacFilter.contains kind then return
-      let ppTac : String := toString info.stx.prettyPrint
-      let elaborator := info.elaborator
-      let goals : List Json ← info.goalsBefore.mapM fun mvarId =>
-        mvarId.withContext do
-          let goal ← Lean.Meta.ppGoal mvarId
-          let t ← Lean.instantiateMVars <| .mvar mvarId
-          let consts := t.getUsedConstantsAsSet
-          return json% {
-            pp : $(toString goal),
-            usedConstants : $(consts.toList.map fun nm => s!"{nm}")
-          }
-      sink <| json% {
-        goals : $(goals),
-        ppTac : $(ppTac),
-        elaborator : $(elaborator),
-        kind : $(kind)
-      }
-  | _ => throw <| .userError "Unsupported Target"
+  go config sink opts
+  | .input tgt => do
+    let filter? := match config.getObjValAs? Bool "filter" with
+      | .ok b => b
+      | .error _ => false
+    discard <| tgt.withVisitM opts (α := Unit) (ctx? := none)
+      (fun _ _ _ => return true) fun ctxInfo info _ _ => ctxInfo.runMetaM' {} do
+        let .ofTacticInfo info := info | return
+        let some (.original ..) := info.stx.getHeadInfo? | return
+        let kind := info.stx.getKind
+        if filter? && tacFilter.contains kind then return
+        let ppTac : String := toString info.stx.prettyPrint
+        let elaborator := info.elaborator
+        let goals : List Json ← info.goalsBefore.mapM fun mvarId =>
+          mvarId.withContext do
+            let goal ← Lean.Meta.ppGoal mvarId
+            let t ← Lean.instantiateMVars <| .mvar mvarId
+            let consts := t.getUsedConstantsAsSet
+            return json% {
+              pp : $(toString goal),
+              usedConstants : $(consts.toList.map fun nm => s!"{nm}")
+            }
+        sink <| json% {
+          goals : $(goals),
+          ppTac : $(ppTac),
+          elaborator : $(elaborator),
+          kind : $(kind)
+        }
+  | _ => throw <| IO.userError "Unsupported Target"
 
 end DataExtractors
 end LeanScout

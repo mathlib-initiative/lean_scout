@@ -27,6 +27,7 @@ structure Config where
   numShards : Nat
   batchRows : Nat
   parallel : Nat
+  extractorConfig : Json
 
 private structure ArgState where
   scoutDir : Option System.FilePath := none
@@ -38,6 +39,7 @@ private structure ArgState where
   numShards : Option Nat := none
   batchRows : Option Nat := none
   parallel : Option Nat := none
+  extractorConfig : Option Json := none
 
 private def resolvePath (cmdRoot : System.FilePath) (path : System.FilePath) : System.FilePath :=
   if path.isAbsolute then path else cmdRoot / path
@@ -58,7 +60,8 @@ private def ArgState.toConfig (s : ArgState) : Except String Config := do
     scoutDir, cmdRoot, command, targetSpec, writerSpec, dataDir,
     numShards := s.numShards.getD 128,
     batchRows := s.batchRows.getD 1024,
-    parallel := s.parallel.getD 1
+    parallel := s.parallel.getD 1,
+    extractorConfig := s.extractorConfig.getD <| Json.mkObj []
   }
 
 def parseArgs (args : List String) : Except String Config := go args {}
@@ -67,6 +70,9 @@ where
     | "--parallel" :: nStr :: rest, s => do
       let some n := nStr.toNat? | throw s!"Invalid value for --parallel: '{nStr}'"
       go rest { s with parallel := some n }
+    | "--config" :: jsonStr :: rest, s => do
+      let .ok json := Json.parse jsonStr | throw s!"Invalid JSON for --config: '{jsonStr}'"
+      go rest { s with extractorConfig := some json }
     | "--scoutDir" :: path :: rest, s => go rest { s with scoutDir := some <| .mk path }
     | "--cmdRoot" :: path :: rest, s => go rest { s with cmdRoot := some <| .mk path }
     | "--command" :: cmd :: rest, s => go rest { s with command := cmd.toName }
@@ -121,7 +127,8 @@ def run (cfg : Config) : IO UInt32 := do
     | .ok tgts => pure tgts
     | .error err => logError err ; return 1
 
-  let extractorCfgs : Array Extractor.Config := targets.map fun tgt => ⟨cfg.command, tgt⟩
+  let extractorCfgs : Array Extractor.Config := targets.map fun tgt =>
+    { command := cfg.command, target := tgt, extractorConfig := cfg.extractorConfig }
 
   let some extractor := (data_extractors).get? cfg.command
     | logError s!"No data extractor found for command '{cfg.command}'" ; return 1
