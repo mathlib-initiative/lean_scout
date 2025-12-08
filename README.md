@@ -189,7 +189,7 @@ lake run scout --command types --parquet --numShards 32 --imports Lean
 
 ## Available Data Extractors
 
-We provide two built-in data extractors: `types` and `tactics`.
+We provide three built-in data extractors: `types`, `tactics`, and `const_dep`.
 
 ### `types`
 Extracts constant declarations with their types and modules.
@@ -229,6 +229,24 @@ lake run scout --command tactics --parquet --parallel 4 --library LeanScoutTest
 
 **Configuration**:
 - `filter` (default: `false`): When `true`, excludes common structural tactic nodes like `byTactic`, `tacticSeq`, identifiers, and punctuation
+
+### `const_dep`
+Extracts constant dependency information, mapping each constant to the set of constants it uses.
+
+**Supported modes**: `--imports` only
+
+**Example**:
+```bash
+lake run scout --command const_dep --parquet --imports Lean
+```
+
+**Output schema**:
+- `name` (string): Constant name
+- `module` (string, nullable): Module containing the constant
+- `deps` (list of strings): Names of constants used by this constant
+
+**Configuration**:
+- `filter` (default: `false`): When `true`, excludes internal declarations (recursors, matchers, `noConfusion`, etc.) from both the extracted constants and their dependency lists
 
 ### List all extractors
 ```bash

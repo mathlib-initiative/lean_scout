@@ -37,7 +37,7 @@ lake run scout --command types --parquet --imports Lean  # Example extractor inv
 # Agent Guidance
 
 ## Project Overview
-Lean Scout creates datasets from Lean4 projects by extracting structured data (types, tactics) into sharded Parquet outputs.
+Lean Scout creates datasets from Lean4 projects by extracting structured data (types, tactics, constant dependencies) into sharded Parquet outputs.
 
 **Architecture:** Lean orchestrator (`Main.lean`) drives Lean subprocesses that emit JSON; for Parquet output, a Python subprocess (`cli.py`) ingests the JSON and writes to sharded Parquet files; for JSONL output, the Lean orchestrator writes directly to stdout.
 
@@ -51,6 +51,7 @@ Lean Scout creates datasets from Lean4 projects by extracting structured data (t
 - List extractors: `lake run scout --command extractors`
 - Imports target (single subprocess):
   - `lake run scout --command types --parquet --imports Lean`
+  - `lake run scout --command const_dep --parquet --imports Lean`
   - `lake run scout --command types --parquet --dataDir $HOME/storage/types --imports Mathlib`
   - Sharding: `--numShards 32`
 - Read targets (parallel):
@@ -70,7 +71,7 @@ Four-phase suite: Lean schema roundtrips, Python parquet writer, Lean orchestrat
 
 ## Architecture Details
 - Core Lean type: `DataExtractor` (schema, shard key, extractor function). Registered via `@[data_extractor cmd]` and discovered at compile time.
-- Targets: `.imports` (single subprocess) vs `.input` (per-file subprocess; used by `--read`, `--library`).
+- Targets: `.imports` (single subprocess; used by `types`, `const_dep`) vs `.input` (per-file subprocess; used by `--read`, `--library` with `tactics`).
 - Writer: `ShardedParquetWriter` (Python) hashes the key field (BLAKE2b) to shards; used by Lean orchestrator via subprocess.
 - Lake config: `scout` lake script adds `--scoutDir` automatically; `module_paths` facet exposes library file lists via `lake query -q <lib>:module_paths`.
 - Convenience script: `extract.sh` creates a temporary subproject, builds `lean_scout`, then runs `lake run scout`. Pass `--dataDir` to place outputs somewhere persistent; the default temp directory is ephemeral.
