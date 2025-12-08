@@ -291,8 +291,14 @@ The orchestration logic is implemented in `Main.lean`, with the Parquet writing 
 ./run_tests
 
 # Run individual phases
-lake test                                        # Phase 0: Lean schema tests
+lake test                                        # Phase 0: Lean schema tests (LeanScoutTest.lean)
 uv run pytest test/internals/ -v                 # Phase 1: Python parquet writer tests
 ./test/integration/test_lean_orchestrator.sh    # Phase 2: Lean orchestrator integration tests
 uv run pytest test/extractors/ -v                # Phase 3: End-to-end extractor tests
 ```
+
+### Lean Schema Tests
+
+The `lake test` command runs `LeanScoutTest.lean`, which validates:
+1. **Schema JSON roundtrip**: All registered data extractors have schemas that serialize to JSON and deserialize back correctly
+2. **Schema Python roundtrip**: Schema definitions are correctly parsed by the Python parquet writer (`test/schema.py`)

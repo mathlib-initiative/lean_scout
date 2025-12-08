@@ -1,0 +1,58 @@
+description: "Test const_dep extractor on LeanScoutTestProject when used as dependency"
+source: "LeanScoutTestProject"
+
+# Property checks: verify specific properties without exact matching
+# Note: Even rfl theorems have dependencies on types and instances from their signatures
+property_checks:
+  - name: "add_zero"
+    properties:
+      module: "LeanScoutTestProject.Basic"
+      module_not_null: true
+      deps_contains_all:
+        - "Nat"
+        - "Eq"
+
+  - name: "zero_add"
+    properties:
+      module: "LeanScoutTestProject.Basic"
+      module_not_null: true
+      deps_contains: "Nat.zero_add"
+
+  - name: "add_comm"
+    properties:
+      module: "LeanScoutTestProject.Basic"
+      module_not_null: true
+      deps_contains_all:
+        - "Nat.zero_add"
+        - "Nat.add_zero"
+        - "Nat.succ_add"
+        - "Nat.add_succ"
+
+  - name: "list_nil_append"
+    properties:
+      module: "LeanScoutTestProject.Lists"
+      module_not_null: true
+      deps_contains: "List"
+
+  - name: "list_map_nil"
+    properties:
+      module: "LeanScoutTestProject.Lists"
+      module_not_null: true
+      deps_contains_all:
+        - "List"
+        - "List.map"
+
+# Count checks: verify dataset statistics
+count_checks:
+  min_records: 8  # At least the 8 theorems we defined
+
+  # Ensure all our theorems exist
+  has_names:
+    - "add_zero"
+    - "zero_add"
+    - "succ_eq_add_one"
+    - "add_comm"
+    - "list_nil_append"
+    - "list_cons_append"
+    - "list_length_nil"
+    - "list_map_nil"
