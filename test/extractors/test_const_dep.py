@@ -100,17 +100,6 @@ def test_const_dep_imports_properties(const_dep_dataset_imports, const_dep_spec)
                     f"Expected '{dep}' in deps for {name}, got: {actual['deps']}"
                 )
 
-        if 'transitiveDeps_contains' in props:
-            dep = props['transitiveDeps_contains']
-            assert dep in actual['transitiveDeps'], (
-                f"Expected '{dep}' in transitiveDeps for {name}, got: {actual['transitiveDeps']}"
-            )
-
-        if 'transitiveDeps_contains_all' in props:
-            for dep in props['transitiveDeps_contains_all']:
-                assert dep in actual['transitiveDeps'], (
-                    f"Expected '{dep}' in transitiveDeps for {name}, got: {actual['transitiveDeps']}"
-                )
 
 
 def test_const_dep_imports_count_min_records(const_dep_dataset_imports, const_dep_spec):
@@ -142,15 +131,11 @@ def test_const_dep_imports_schema(const_dep_dataset_imports):
     assert 'name' in first_record
     assert 'module' in first_record
     assert 'deps' in first_record
-    assert 'transitiveDeps' in first_record
 
     assert isinstance(first_record['name'], str)
     assert first_record['module'] is None or isinstance(first_record['module'], str)
     assert isinstance(first_record['deps'], list)
     for dep in first_record['deps']:
-        assert isinstance(dep, str)
-    assert isinstance(first_record['transitiveDeps'], list)
-    for dep in first_record['transitiveDeps']:
         assert isinstance(dep, str)
 
 
@@ -202,10 +187,8 @@ def test_const_dep_jsonl_output_format(const_dep_jsonl_records):
     for record in const_dep_jsonl_records:
         assert "name" in record, "Record should have 'name' field"
         assert "deps" in record, "Record should have 'deps' field"
-        assert "transitiveDeps" in record, "Record should have 'transitiveDeps' field"
         assert isinstance(record["name"], str)
         assert isinstance(record["deps"], list)
-        assert isinstance(record["transitiveDeps"], list)
 
 
 def test_const_dep_jsonl_has_expected_records(const_dep_jsonl_records):
@@ -226,10 +209,6 @@ def test_const_dep_jsonl_record_content(const_dep_jsonl_records):
     # add_comm should have dependencies on Nat lemmas
     assert "Nat.zero_add" in add_comm["deps"]
     assert "Nat.add_zero" in add_comm["deps"]
-    # transitiveDeps should contain at least what deps contains, plus more
-    assert "Nat.zero_add" in add_comm["transitiveDeps"]
-    assert "Nat.add_zero" in add_comm["transitiveDeps"]
-    assert "Nat" in add_comm["transitiveDeps"]
 
 
 def test_const_dep_jsonl_no_output_directory_created():

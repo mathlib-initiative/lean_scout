@@ -244,7 +244,6 @@ lake run scout --command const_dep --parquet --imports Lean
 - `name` (string): Constant name
 - `module` (string, nullable): Module containing the constant
 - `deps` (list of strings): Names of constants directly used by this constant
-- `transitiveDeps` (list of strings): Names of all constants transitively used by this constant
 
 **Configuration**:
 - `filter` (default: `false`): When `true`, excludes internal declarations (recursors, matchers, `noConfusion`, etc.) from both the extracted constants and their dependency lists
