@@ -189,7 +189,7 @@ lake run scout --command types --parquet --numShards 32 --imports Lean
 
 ## Available Data Extractors
 
-We provide two built-in data extractors: `types` and `tactics`.
+We provide three built-in data extractors: `types`, `tactics`, and `const_dep`.
 
 ### `types`
 Extracts constant declarations with their types and modules.
@@ -229,6 +229,25 @@ lake run scout --command tactics --parquet --parallel 4 --library LeanScoutTest
 
 **Configuration**:
 - `filter` (default: `false`): When `true`, excludes common structural tactic nodes like `byTactic`, `tacticSeq`, identifiers, and punctuation
+
+### `const_dep`
+Extracts constant dependency information, mapping each constant to the set of constants it uses.
+
+**Supported modes**: `--imports` only
+
+**Example**:
+```bash
+lake run scout --command const_dep --parquet --imports Lean
+```
+
+**Output schema**:
+- `name` (string): Constant name
+- `module` (string, nullable): Module containing the constant
+- `deps` (list of strings): Names of constants directly used by this constant
+- `transitiveDeps` (list of strings): Names of all constants transitively used by this constant
+
+**Configuration**:
+- `filter` (default: `false`): When `true`, excludes internal declarations (recursors, matchers, `noConfusion`, etc.) from both the extracted constants and their dependency lists
 
 ### List all extractors
 ```bash
@@ -273,8 +292,14 @@ The orchestration logic is implemented in `Main.lean`, with the Parquet writing 
 ./run_tests
 
 # Run individual phases
-lake test                                        # Phase 0: Lean schema tests
+lake test                                        # Phase 0: Lean schema tests (LeanScoutTest.lean)
 uv run pytest test/internals/ -v                 # Phase 1: Python parquet writer tests
 ./test/integration/test_lean_orchestrator.sh    # Phase 2: Lean orchestrator integration tests
 uv run pytest test/extractors/ -v                # Phase 3: End-to-end extractor tests
 ```
+
+### Lean Schema Tests
+
+The `lake test` command runs `LeanScoutTest.lean`, which validates:
+1. **Schema JSON roundtrip**: All registered data extractors have schemas that serialize to JSON and deserialize back correctly
+2. **Schema Python roundtrip**: Schema definitions are correctly parsed by the Python parquet writer (`test/schema.py`)
