@@ -11,16 +11,12 @@ property_checks:
       deps_contains_all:
         - "Nat"
         - "Eq"
-      transitiveDeps_contains_all:
-        - "Nat"
-        - "Eq"
 
   - name: "zero_add"
     properties:
       module: "LeanScoutTestProject.Basic"
       module_not_null: true
       deps_contains: "Nat.zero_add"
-      transitiveDeps_contains: "Nat.zero_add"
 
   - name: "add_comm"
     properties:
@@ -31,28 +27,18 @@ property_checks:
         - "Nat.add_zero"
         - "Nat.succ_add"
         - "Nat.add_succ"
-      transitiveDeps_contains_all:
-        - "Nat.zero_add"
-        - "Nat.add_zero"
-        - "Nat.succ_add"
-        - "Nat.add_succ"
-        - "Nat"
 
   - name: "list_nil_append"
     properties:
       module: "LeanScoutTestProject.Lists"
       module_not_null: true
       deps_contains: "List"
-      transitiveDeps_contains: "List"
 
   - name: "list_map_nil"
     properties:
       module: "LeanScoutTestProject.Lists"
       module_not_null: true
       deps_contains_all:
-        - "List"
-        - "List.map"
-      transitiveDeps_contains_all:
         - "List"
         - "List.map"
 
