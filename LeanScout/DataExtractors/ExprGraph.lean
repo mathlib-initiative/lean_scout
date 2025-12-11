@@ -95,8 +95,8 @@ def mix (a : α) (b : β) [Hashable α] [Hashable β] : UInt64 :=
 
 partial
 def mkExprGraph (e : Expr) : MonadCacheT Expr (WithId Node × ExprGraph) MetaM (WithId Node × ExprGraph) := do
-  let e ← instantiateMVars e
-  checkCache e fun _ => do
+  let lctx := (← getLCtx).sanitizeNames.run' { options := ← getOptions }
+  Meta.withLCtx lctx (← Meta.getLocalInstances) do let e ← instantiateMVars e ; checkCache e fun _ => do
     let outId : UInt64 := mix e "Lean.Expr"
     match e with
     | .bvar id =>
