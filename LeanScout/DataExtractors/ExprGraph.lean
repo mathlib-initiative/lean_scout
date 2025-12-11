@@ -17,21 +17,36 @@ def _root_.Lean.MData.toJson (md : MData) : Json :=
     | .ofSyntax s => .str <| toString s.prettyPrint
 
 inductive Node where
-  | bvar : Nat → Node
-  | fvar : FVarId → Node
-  | mvar : MVarId → Node
-  | sort : Level → Node
-  | const : Name → List Level → Node
+  | bvar (id : Nat) : Node
+  | cdecl (idx : Nat) (id : FVarId) (nm : Name) (binderInfo : BinderInfo) (kind : LocalDeclKind) : Node
+  | ldecl (idx : Nat) (id : FVarId) (nm : Name) (nonDep : Bool) (kind : LocalDeclKind) : Node
+  | mvar (mvarId : MVarId) : Node
+  | sort (level : Level) : Node
+  | const (name : Name) (levels : List Level) : Node
   | app : Node
-  | lam : Name → BinderInfo → Node
-  | forallE : Name → BinderInfo → Node
-  | letE : Name → Bool → Node
-  | lit : Literal → Node
-  | mdata : Json → Node
-  | proj : Name → Nat → Node
+  | lam (name : Name) (binderInfo : BinderInfo) : Node
+  | forallE (name : Name) (binderInfo : BinderInfo) : Node
+  | letE (name : Name) (nonDep : Bool) : Node
+  | lit (lit : Literal) : Node
+  | mdata (md : Json) : Node
+  | proj (name : Name) (idx : Nat) : Node
 deriving Hashable, BEq
 
 inductive Edge where
+  | cdeclType
+  | ldeclType
+  | ldeclValue
+  | mvarType
+  | appFn
+  | appArg
+  | lamBody
+  | lamFVar
+  | forallEBody
+  | forallEFVar
+  | letEBody
+  | letEFVar
+  | mdata
+  | proj
 deriving Hashable, BEq
 
 end ExprGraph
@@ -78,6 +93,7 @@ def addEdge (g : ExprGraph) (edge : WithId Edge) (source target : WithId Node) :
 def mix (a : α) (b : β) [Hashable α] [Hashable β] : UInt64 :=
   mixHash (hash a) (hash b)
 
+partial
 def mkExprGraph (e : Expr) : MonadCacheT Expr (WithId Node × ExprGraph) MetaM (WithId Node × ExprGraph) := do
   let e ← instantiateMVars e
   checkCache e fun _ => do
@@ -88,9 +104,79 @@ def mkExprGraph (e : Expr) : MonadCacheT Expr (WithId Node × ExprGraph) MetaM (
       return (outNode, node outNode)
     | .fvar id =>
       match ← id.getDecl with
-      | .cdecl idx id nm tp bi kind => _
-      | .ldecl idx id nm tp val nonDep kind => _
-    | _ => sorry
+      | .cdecl idx id nm tp bi kind =>
+        let outNode : WithId Node := ⟨outId, .cdecl idx id nm bi kind⟩
+        let (tpNode, tpGraph) ← mkExprGraph tp
+        let outGraph := tpGraph.addEdge ⟨outId, .cdeclType⟩ tpNode outNode
+        return (outNode, outGraph)
+      | .ldecl idx id nm tp val nonDep kind =>
+        let outNode : WithId Node := ⟨outId, .ldecl idx id nm nonDep kind⟩
+        let (tpNode, tpGraph) ← mkExprGraph tp
+        let (valNode, valGraph) ← mkExprGraph val
+        let outGraph := tpGraph.union valGraph
+          |>.addEdge ⟨outId, .ldeclType⟩ tpNode outNode
+          |>.addEdge ⟨outId, .ldeclValue⟩ valNode outNode
+        return (outNode, outGraph)
+    | .mvar id =>
+      let outNode : WithId Node := ⟨outId, .mvar id⟩
+      let tp ← Meta.inferType e
+      let (tpNode, tpGraph) ← mkExprGraph tp
+      let outGraph := tpGraph.addEdge ⟨outId, .mvarType⟩ tpNode outNode
+      return (outNode, outGraph)
+    | .sort level =>
+      let outNode : WithId Node := ⟨outId, .sort level⟩
+      return (outNode, node outNode)
+    | .const name levels =>
+      let outNode : WithId Node := ⟨outId, .const name levels⟩
+      return (outNode, node outNode)
+    | .app fn arg =>
+      let (fnNode, fnGraph) ← mkExprGraph fn
+      let (argNode, argGraph) ← mkExprGraph arg
+      let outNode : WithId Node := ⟨outId, .app⟩
+      let outGraph := fnGraph.union argGraph
+        |>.addEdge ⟨outId, .appFn⟩ fnNode outNode
+        |>.addEdge ⟨outId, .appArg⟩ argNode outNode
+      return (outNode, outGraph)
+    | .lam nm tp body bi => Meta.withLocalDecl nm bi tp fun fvar => do
+      let body := body.instantiateRev #[fvar]
+      let (bodyNode, bodyGraph) ← mkExprGraph body
+      let (varNode, varGraph) ← mkExprGraph fvar
+      let outNode : WithId Node := ⟨outId, .lam nm bi⟩
+      let outGraph := bodyGraph.union varGraph
+        |>.addEdge ⟨outId, .lamBody⟩ bodyNode outNode
+        |>.addEdge ⟨outId, .lamFVar⟩ varNode outNode
+      return (outNode, outGraph)
+    | .forallE nm tp body bi => Meta.withLocalDecl nm bi tp fun fvar => do
+      let body := body.instantiateRev #[fvar]
+      let (bodyNode, bodyGraph) ← mkExprGraph body
+      let (varNode, varGraph) ← mkExprGraph fvar
+      let outNode : WithId Node := ⟨outId, .forallE nm bi⟩
+      let outGraph := bodyGraph.union varGraph
+        |>.addEdge ⟨outId, .forallEBody⟩ bodyNode outNode
+        |>.addEdge ⟨outId, .forallEFVar⟩ varNode outNode
+      return (outNode, outGraph)
+    | .letE nm tp val body nonDep => Meta.withLetDecl (nondep := nonDep) nm tp val fun fvar => do
+      let body := body.instantiateRev #[fvar]
+      let (bodyNode, bodyGraph) ← mkExprGraph body
+      let (varNode, varGraph) ← mkExprGraph fvar
+      let outNode : WithId Node := ⟨outId, .letE nm nonDep⟩
+      let outGraph := bodyGraph.union varGraph
+        |>.addEdge ⟨outId, .letEBody⟩ bodyNode outNode
+        |>.addEdge ⟨outId, .letEFVar⟩ varNode outNode
+      return (outNode, outGraph)
+    | .lit lit =>
+      let outNode : WithId Node := ⟨outId, .lit lit⟩
+      return (outNode, node outNode)
+    | .mdata md expr =>
+      let (exprNode, exprGraph) ← mkExprGraph expr
+      let outNode : WithId Node := ⟨outId, .mdata md.toJson⟩
+      let outGraph := exprGraph.addEdge ⟨outId, .mdata⟩ exprNode outNode
+      return (outNode, outGraph)
+    | .proj nm idx struct =>
+      let (structNode, structGraph) ← mkExprGraph struct
+      let outNode : WithId Node := ⟨outId, .proj nm idx⟩
+      let outGraph := structGraph.addEdge ⟨outId, .proj⟩ structNode outNode
+      return (outNode, outGraph)
 
 end ExprGraph
 
