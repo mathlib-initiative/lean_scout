@@ -178,6 +178,14 @@ def mkExprGraph (e : Expr) : MonadCacheT Expr (WithId Node × ExprGraph) MetaM (
       let outGraph := structGraph.addEdge ⟨outId, .proj⟩ structNode outNode
       return (outNode, outGraph)
 
+def mkExprGraphWithLCtx (e : Expr) : MonadCacheT Expr (WithId Node × ExprGraph) MetaM (WithId Node × ExprGraph) := do
+  let (exprNode, exprGraph) ← mkExprGraph e
+  let mut outGraph := exprGraph
+  for decl in ← getLCtx do
+    let (_, declGraph) ← mkExprGraph <| .fvar decl.fvarId
+    outGraph := outGraph.union declGraph
+  return (exprNode, outGraph)
+
 end ExprGraph
 
 end LeanScout
