@@ -1,7 +1,11 @@
 module
 
-import Lean
+public import Lean
+public import LeanScout.Types
+
 open Lean Std
+
+public section
 
 namespace LeanScout
 
@@ -94,7 +98,8 @@ def mix (a : α) (b : β) [Hashable α] [Hashable β] : UInt64 :=
   mixHash (hash a) (hash b)
 
 partial
-def mkExprGraph (e : Expr) : MonadCacheT Expr (WithId Node × ExprGraph) MetaM (WithId Node × ExprGraph) := do
+def mkExprGraph (e : Expr) :
+    MonadCacheT Expr (WithId Node × ExprGraph) MetaM (WithId Node × ExprGraph) := do
   let lctx := (← getLCtx).sanitizeNames.run' { options := ← getOptions }
   Meta.withLCtx lctx (← Meta.getLocalInstances) do let e ← instantiateMVars e ; checkCache e fun _ => do
     let outId : UInt64 := mix e "Lean.Expr"
@@ -178,13 +183,66 @@ def mkExprGraph (e : Expr) : MonadCacheT Expr (WithId Node × ExprGraph) MetaM (
       let outGraph := structGraph.addEdge ⟨outId, .proj⟩ structNode outNode
       return (outNode, outGraph)
 
-def mkExprGraphWithLCtx (e : Expr) : MonadCacheT Expr (WithId Node × ExprGraph) MetaM (WithId Node × ExprGraph) := do
+def mkExprGraphWithLCtx (e : Expr) :
+    MonadCacheT Expr (WithId Node × ExprGraph) MetaM (WithId Node × ExprGraph) := do
   let (exprNode, exprGraph) ← mkExprGraph e
   let mut outGraph := exprGraph
   for decl in ← getLCtx do
     let (_, declGraph) ← mkExprGraph <| .fvar decl.fvarId
     outGraph := outGraph.union declGraph
   return (exprNode, outGraph)
+
+def serialize
+    (g : ExprGraph)
+    (root : Option (WithId Node) := none)
+    (serializeNode : Node → String)
+    (serializeEdge : Edge → String) :
+    Json := Id.run do
+  let mut nodes : Array Json := {}
+  let mut nodeToIdx : Std.HashMap (WithId Node) Nat := {}
+  for node in g.nodes do
+    nodeToIdx := nodeToIdx.insert node nodes.size
+    nodes := nodes.push <| json% {
+      idx : $(nodes.size),
+      node : $(serializeNode node.val)
+    }
+  let mut edges : Array Json := {}
+  for edge in g.edges do
+    let some src := g.src.get? edge | continue
+    let some tgt := g.tgt.get? edge | continue
+    let some srcIdx := nodeToIdx.get? src | continue
+    let some tgtIdx := nodeToIdx.get? tgt | continue
+    edges := edges.push <| json% {
+      sourceIdx : $(srcIdx),
+      targetIdx : $(tgtIdx),
+      edge : $(serializeEdge edge.val)
+    }
+  let rootIdx : Option Nat := do
+    let r ← root
+    let idx ← nodeToIdx.get? r
+    return idx
+  return json% {
+    nodes : $(nodes),
+    edges : $(edges),
+    rootIdx : $(rootIdx)
+  }
+
+def nodeSchema : Schema := .mk [
+  { name := "idx", nullable := false, type := .nat },
+  { name := "node", nullable := false, type := .string },
+]
+
+def edgeSchema : Schema := .mk [
+  { name := "sourceIdx", nullable := false, type := .nat },
+  { name := "targetIdx", nullable := false, type := .nat },
+  { name := "edge", nullable := false, type := .string },
+]
+
+def graphSchema : Schema := .mk [
+  { name := "nodes", nullable := false, type := .list (.struct <| nodeSchema.fields) },
+  { name := "edges", nullable := false, type := .list (.struct <| edgeSchema.fields) },
+  { name := "rootIdx", nullable := true, type := .nat }
+]
 
 end ExprGraph
 
