@@ -213,8 +213,8 @@ def serialize
     let some srcIdx := nodeToIdx.get? src | continue
     let some tgtIdx := nodeToIdx.get? tgt | continue
     edges := edges.push <| json% {
-      sourceIdx : $(srcIdx),
-      targetIdx : $(tgtIdx),
+      src : $(srcIdx),
+      tgt : $(tgtIdx),
       edge : $(serializeEdge edge.val)
     }
   let rootIdx : Option Nat := do
@@ -233,8 +233,8 @@ def nodeSchema : Schema := .mk [
 ]
 
 def edgeSchema : Schema := .mk [
-  { name := "sourceIdx", nullable := false, type := .nat },
-  { name := "targetIdx", nullable := false, type := .nat },
+  { name := "src", nullable := false, type := .nat },
+  { name := "tgt", nullable := false, type := .nat },
   { name := "edge", nullable := false, type := .string },
 ]
 

@@ -11,32 +11,54 @@ namespace DataExtractors
 
 open ExprGraph
 
-@[data_extractor const_dep]
-public unsafe def constDep : DataExtractor where
+@[data_extractor const_graph]
+public unsafe def constGraph : DataExtractor where
   schema := .mk [
     { name := "name", nullable := false, type := .string },
-    { name := "module", nullable := true, type := .string },
-    { name := "deps", nullable := false, type := .list .string },
+    { name := "graph", nullable := false, type := .struct graphSchema.fields }
   ]
   key := "name"
-  go config sink opts
+  go _config sink opts
   | .imports tgt => do
-    let filter? := match config.getObjValAs? Bool "filter" with
-      | .ok b => b
-      | .error _ => false
-    discard <| tgt.runParallelCoreM opts fun env n c => Meta.MetaM.run' do
-      if filter? && (← declNameFilter n) then return
-      let mod : Option Name := match env.getModuleIdxFor? n with
-        | some idx => env.header.moduleNames[idx]!
-        | none => if env.constants.map₂.contains n then env.header.mainModule else none
-      let deps : Array String ← c.getUsedConstantsAsSet.toArray |>.filterMapM fun nm => do
-        if filter? && (← declNameFilter nm) then return none else return nm.toString
+    discard <| tgt.runParallelCoreM opts fun _ n c => Meta.MetaM.run' do
+      let (tpNode, tpGraph) ← mkExprGraph c.type |>.run
+      let serialized := tpGraph.serialize (tpNode) serializeNode serializeEdge
       sink <| json% {
         name : $(n),
-        module : $(mod),
-        deps : $(deps)
+        graph : $(serialized)
       }
+      return
   | _ => throw <| IO.userError "Unsupported Target"
+where
+serializeNode : Node → String
+  | .const nm _ => s!"const: {nm}"
+  | .bvar .. => "bvar"
+  | .mvar .. => "mvar"
+  | .cdecl .. => "cdecl"
+  | .ldecl .. => "ldecl"
+  | .sort .. => "sort"
+  | .app => "app"
+  | .lam .. => "lam"
+  | .forallE .. => "forallE"
+  | .letE .. => "letE"
+  | .lit .. => "lit"
+  | .mdata .. => "mdata"
+  | .proj .. => "proj"
+serializeEdge : Edge → String
+  | .cdeclType => "cdeclType"
+  | .ldeclType => "ldeclType"
+  | .ldeclValue => "ldeclValue"
+  | .mvarType => "mvarType"
+  | .appFn => "appFn"
+  | .appArg => "appArg"
+  | .lamBody => "lamBody"
+  | .lamFVar => "lamFVar"
+  | .forallEBody => "forallEBody"
+  | .forallEFVar => "forallEFVar"
+  | .letEBody => "letEBody"
+  | .letEFVar => "letEFVar"
+  | .mdata => "mdata"
+  | .proj => "proj"
 
 end DataExtractors
 end LeanScout
