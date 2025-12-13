@@ -28,6 +28,11 @@ lean_exe lean_scout where
 lean_exe lean_scout_schema where
   root := `ScoutSchema
 
+@[default_target]
+lean_exe extract_with where
+  root := `ExtractWith
+  supportInterpreter := true
+
 library_facet module_paths (lib) : Array System.FilePath := do
   let modules ← (← lib.modules.fetch).await
   let mut out := #[]
