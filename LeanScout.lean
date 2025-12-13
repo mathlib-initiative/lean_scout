@@ -8,4 +8,5 @@ public import LeanScout.DataExtractors
 public import LeanScout.Types
 public import LeanScout.Schema
 public import LeanScout.Extractor
+public import LeanScout.ExtractWith
 public import LeanScout.Subprocess

@@ -8,26 +8,30 @@ namespace LeanScout
 open Lean
 
 namespace ExtractWith
-public structure Config where
-  target : Target
-  extractorConfig : Json := Json.mkObj []
-deriving ToJson, FromJson
 
 public unsafe
-def extractWith (mdl : Name) (nm : Name) (cfg : Config): IO UInt32 := do
+def getDataExtractor (mdl nm : Name) : IO DataExtractor := do
   let importTgt : ImportsTarget := .mk <| #[{ module := mdl }]
   importTgt.runCoreM {} <| Meta.MetaM.run' do
     let some c := (← getEnv).find? nm
-      | logError s!"Failed to find {nm}" ; return 1
-    let .const `DataExtractor [] := c.type
-      | logError s!"{nm} is not a data extractor" ; return 1
-    let d ← Meta.evalExpr DataExtractor (.const `DataExtractor []) (.const nm [])
+      | show IO _ from throw <| IO.userError s!"Failed to find {nm}"
+    let .const ``DataExtractor [] := c.type
+      | show IO _ from throw <| .userError s!"{nm} is not a data extractor."
+    Meta.evalExpr DataExtractor (.const ``DataExtractor []) (.const nm [])
+
+public unsafe
+def extractWith (mdl nm : Name) (tgt : Target) (cfg : Json): IO UInt32 := do
+  try
     let stdout ← IO.getStdout
     let sink (j : Json) : IO Unit := do
       stdout.putStrLn j.compress
       stdout.flush
-    d.go cfg.extractorConfig sink {} cfg.target
+    let d ← getDataExtractor mdl nm
+    d.go cfg sink {} tgt
     return 0
+  catch e =>
+    logError s!"{e}"
+    return 1
 
 end ExtractWith
 

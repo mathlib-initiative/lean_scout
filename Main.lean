@@ -138,14 +138,16 @@ def run (cfg : Config) : IO UInt32 := do
   runCommandSpec cfg.commandSpec targets
 where
 runCommandSpec (cmdSpec : CommandSpec) (tgts : Array Target) := do
-  let .command cmd := cmdSpec
-    | logError "Unimplemented command specification" ; return 1
+  let extractorCfgs : Array (Target × Json):= tgts.map fun tgt =>
+    (tgt, cfg.extractorConfig)
 
-  let extractorCfgs : Array Extractor.Config := tgts.map fun tgt =>
-    { target := tgt, extractorConfig := cfg.extractorConfig }
+  let extractor : Option DataExtractor ← show IO (Option DataExtractor) from do
+    match cmdSpec with
+    | .command cmd => return (data_extractors).get? cmd
+    | .extractor mdl nm => some <$> ExtractWith.getDataExtractor mdl nm
 
-  let some extractor := (data_extractors).get? cmd
-    | logError s!"No data extractor found for command '{cmd}'" ; return 1
+  let some extractor := extractor
+    | logError "Error" ; return 1
 
   let writer? ← match cfg.writerSpec with
   | .jsonl => jsonlWriter
@@ -155,23 +157,29 @@ runCommandSpec (cmdSpec : CommandSpec) (tgts : Array Target) := do
   | .ok writer => go cmdSpec writer extractorCfgs
   | .error e => logError e ; return 1
 
-go (cmdSpec : CommandSpec) (writer : Writer) (extractorCfgs : Array Extractor.Config) : IO UInt32 := do
+go (cmdSpec : CommandSpec) (writer : Writer) (extractorCfgs : Array (Target × Json)) : IO UInt32 := do
 
-  let .command cmd := cmdSpec
-    | logError "Unimplemented command specification" ; return 1
+  --let .command cmd := cmdSpec
+  --  | logError "Unimplemented command specification" ; return 1
 
   logInfo s!"Starting data extraction with {extractorCfgs.size} extractor configurations"
 
   let writer : Std.Mutex Writer ← Std.Mutex.new <| writer
 
   let mut launches : Array (String × IO (Task <| Except IO.Error UInt32)) := #[]
-  for extractorCfg in extractorCfgs do
+
+  let mkLaunch (tgt : Target) (cfg : Json) : IO (String × IO (Task <| Except IO.Error UInt32)) := sorry
+
+  for (tgt, cfg) in extractorCfgs do
+    /-
     let cfgArg := Lean.toJson extractorCfg |>.compress
     let args : Array String := #[
       "exe", "-q", "lean_scout_extractor", cmd.toString, cfgArg
     ]
     let task := subprocessLines "lake" args fun s => writer.atomically get >>= fun w => w.sink s
-    launches := launches.push (cfgArg, task)
+    -/
+    let launch ← mkLaunch tgt cfg
+    launches := launches.push launch
 
   logInfo s!"Launching {launches.size} extractor tasks"
 
