@@ -17,10 +17,14 @@ inductive WriterSpec where
   | parquet
   | jsonl
 
+inductive CommandSpec where
+  | command (command : Command) : CommandSpec
+  | extractor (module : Name) (name : Name) : CommandSpec
+
 structure Config where
   scoutDir : System.FilePath
   cmdRoot : System.FilePath
-  command : Command
+  commandSpec : CommandSpec
   targetSpec : TargetSpec
   writerSpec : WriterSpec
   dataDir : System.FilePath
@@ -32,7 +36,7 @@ structure Config where
 private structure ArgState where
   scoutDir : Option System.FilePath := none
   cmdRoot : Option System.FilePath := none
-  command : Option Command := none
+  commandSpec : Option CommandSpec := none
   targetSpec : Option TargetSpec := none
   writerSpec : Option WriterSpec := none
   dataDir : Option System.FilePath := none
@@ -46,7 +50,7 @@ private def resolvePath (cmdRoot : System.FilePath) (path : System.FilePath) : S
 
 private def ArgState.toConfig (s : ArgState) : Except String Config := do
   let some scoutDir := s.scoutDir | throw "No scout directory specified (use --scoutDir)"
-  let some command := s.command | throw "No command specified (use --command)"
+  let some commandSpec := s.commandSpec | throw "No command spec specified (use --command or --extractorModule and --extractorName)"
   let some targetSpec := s.targetSpec | throw "No target specified (use --imports, --library, or --read)"
   let some writerSpec := s.writerSpec | throw "No writer specified (use --parquet or --jsonl)"
   let cmdRoot := s.cmdRoot.getD <| .mk "."
@@ -57,7 +61,7 @@ private def ArgState.toConfig (s : ArgState) : Except String Config := do
     | .read paths => .read <| paths.map (resolvePath cmdRoot)
     | other => other
   return {
-    scoutDir, cmdRoot, command, targetSpec, writerSpec, dataDir,
+    scoutDir, cmdRoot, commandSpec, targetSpec, writerSpec, dataDir,
     numShards := s.numShards.getD 128,
     batchRows := s.batchRows.getD 1024,
     parallel := s.parallel.getD 1,
@@ -75,7 +79,12 @@ where
       go rest { s with extractorConfig := some json }
     | "--scoutDir" :: path :: rest, s => go rest { s with scoutDir := some <| .mk path }
     | "--cmdRoot" :: path :: rest, s => go rest { s with cmdRoot := some <| .mk path }
-    | "--command" :: cmd :: rest, s => go rest { s with command := cmd.toName }
+    | "--command" :: cmd :: rest, s => do
+      if s.commandSpec.isSome then throw "Cannot specify multiple command specs (--command, or --extractorModule and --extractorName)"
+      go rest { s with commandSpec := some <| .command cmd.toName }
+    | "--extractorModule" :: mdl :: "--extractorName" :: nm :: rest, s => do
+      if s.commandSpec.isSome then throw "Cannot specify multiple command specs (--command, or --extractorModule and --extractorName)"
+      go rest { s with commandSpec := some <| .extractor mdl.toName nm.toName }
     | "--dataDir" :: path :: rest, s => go rest { s with dataDir := some <| .mk path }
     | "--numShards" :: nStr :: rest, s => do
       let some n := nStr.toNat? | throw s!"Invalid value for --numShards: '{nStr}'"
@@ -126,24 +135,30 @@ def run (cfg : Config) : IO UInt32 := do
   let targets ← match ← cfg.targetSpec.toTargets.run with
     | .ok tgts => pure tgts
     | .error err => logError err ; return 1
+  runCommandSpec cfg.commandSpec targets
+where
+runCommandSpec (cmdSpec : CommandSpec) (tgts : Array Target) := do
+  let .command cmd := cmdSpec
+    | logError "Unimplemented command specification" ; return 1
 
-  let extractorCfgs : Array Extractor.Config := targets.map fun tgt =>
-    { command := cfg.command, target := tgt, extractorConfig := cfg.extractorConfig }
+  let extractorCfgs : Array Extractor.Config := tgts.map fun tgt =>
+    { target := tgt, extractorConfig := cfg.extractorConfig }
 
-  let some extractor := (data_extractors).get? cfg.command
-    | logError s!"No data extractor found for command '{cfg.command}'" ; return 1
+  let some extractor := (data_extractors).get? cmd
+    | logError s!"No data extractor found for command '{cmd}'" ; return 1
 
   let writer? ← match cfg.writerSpec with
   | .jsonl => jsonlWriter
   | .parquet => parquetWriter cfg extractor
 
   match writer? with
-  | .ok writer => go writer extractorCfgs
+  | .ok writer => go cmdSpec writer extractorCfgs
   | .error e => logError e ; return 1
 
-where
+go (cmdSpec : CommandSpec) (writer : Writer) (extractorCfgs : Array Extractor.Config) : IO UInt32 := do
 
-go (writer : Writer) (extractorCfgs : Array Extractor.Config) : IO UInt32 := do
+  let .command cmd := cmdSpec
+    | logError "Unimplemented command specification" ; return 1
 
   logInfo s!"Starting data extraction with {extractorCfgs.size} extractor configurations"
 
@@ -153,7 +168,7 @@ go (writer : Writer) (extractorCfgs : Array Extractor.Config) : IO UInt32 := do
   for extractorCfg in extractorCfgs do
     let cfgArg := Lean.toJson extractorCfg |>.compress
     let args : Array String := #[
-      "exe", "-q", "lean_scout_extractor", cfgArg
+      "exe", "-q", "lean_scout_extractor", cmd.toString, cfgArg
     ]
     let task := subprocessLines "lake" args fun s => writer.atomically get >>= fun w => w.sink s
     launches := launches.push (cfgArg, task)

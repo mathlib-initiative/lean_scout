@@ -9,21 +9,19 @@ open Lean
 
 namespace ExtractWith
 public structure Config where
-  module : Name
-  name : Name
   target : Target
   extractorConfig : Json := Json.mkObj []
 deriving ToJson, FromJson
 
 public unsafe
-def extractWith (cfg : Config): IO UInt32 := do
-  let importTgt : ImportsTarget := .mk <| #[{ module := cfg.module }]
+def extractWith (mdl : Name) (nm : Name) (cfg : Config): IO UInt32 := do
+  let importTgt : ImportsTarget := .mk <| #[{ module := mdl }]
   importTgt.runCoreM {} <| Meta.MetaM.run' do
-    let some c := (← getEnv).find? cfg.name
-      | logError s!"Failed to find {cfg.name}" ; return 1
+    let some c := (← getEnv).find? nm
+      | logError s!"Failed to find {nm}" ; return 1
     let .const `DataExtractor [] := c.type
-      | logError s!"{cfg.name} is not a data extractor" ; return 1
-    let d ← Meta.evalExpr DataExtractor (.const `DataExtractor []) (.const cfg.name [])
+      | logError s!"{nm} is not a data extractor" ; return 1
+    let d ← Meta.evalExpr DataExtractor (.const `DataExtractor []) (.const nm [])
     let stdout ← IO.getStdout
     let sink (j : Json) : IO Unit := do
       stdout.putStrLn j.compress

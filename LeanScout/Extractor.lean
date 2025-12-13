@@ -9,15 +9,14 @@ open Lean
 
 namespace Extractor
 public structure Config where
-  command : Command
   target : Target
   extractorConfig : Json := Json.mkObj []
 deriving ToJson, FromJson
 
 public unsafe
-def extract (cfg : Config): IO UInt32 := do
-  let some extractor := (data_extractors).get? cfg.command
-    | logger.log .error s!"Failed to find extractor {cfg.command}" ; return 1
+def extract (cmd : Command) (cfg : Config): IO UInt32 := do
+  let some extractor := (data_extractors).get? cmd
+    | logger.log .error s!"Failed to find extractor {cmd}" ; return 1
   let stdout ← IO.getStdout
   let sink (j : Json) : IO Unit := do
     stdout.putStrLn j.compress
