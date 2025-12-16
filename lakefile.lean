@@ -37,7 +37,7 @@ library_facet module_paths (lib) : Array System.FilePath := do
 
 script scout (args) := do
   let workspace ← getWorkspace
-  let some scout := workspace.findPackage? `lean_scout |
+  let some scout := workspace.findPackageByName? `lean_scout |
     throw <| .userError "Failed to find lean_scout dependency"
   let scoutRoot := scout.rootDir
   let child ← IO.Process.spawn {
