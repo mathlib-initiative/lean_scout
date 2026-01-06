@@ -110,8 +110,8 @@ def TargetSpec.toTargets : TargetSpec → ExceptT String IO (Array Target)
       args := #["query", "-q", s!"{name}:module_paths"]
     }
     if output.exitCode != 0 then
-      throw s!"lake query failed for library '{name}': {output.stderr.trim}"
-    let lines := output.stdout.splitOn "\n" |>.filter (·.trim ≠ "")
+      throw s!"lake query failed for library '{name}': {output.stderr.trimAscii}"
+    let lines := output.stdout.splitOn "\n" |>.filter (·.trimAscii.toString ≠ "")
     if lines.isEmpty then
       throw s!"No modules found for library '{name}'"
     return lines.toArray.map fun s => .read <| System.FilePath.mk s

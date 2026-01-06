@@ -22,7 +22,7 @@ def schemaRoundtrip (schema : Schema) : IO Unit := do
   let (stdin, _) ← c.takeStdin
   stdin.putStrLn schema.toJson.compress
   println! "\n"
-  println! (← c.stdout.readToEnd).trim
+  println! (← c.stdout.readToEnd).trimAscii
 
 /--
 info:
