@@ -21,7 +21,7 @@ where processLines (kill : IO Unit) (stdout : IO.FS.Handle) : IO Unit := do
       return
     let line ← stdout.getLine
     if line.isEmpty then return
-    go line.trimRight
+    go line.trimAsciiEnd.toString
     processLines kill stdout
 
 end LeanScout
