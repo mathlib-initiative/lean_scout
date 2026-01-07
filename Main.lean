@@ -28,6 +28,7 @@ structure Config where
   batchRows : Nat
   parallel : Nat
   extractorConfig : Json
+  plugins : Array Name
 
 private structure ArgState where
   scoutDir : Option System.FilePath := none
@@ -40,6 +41,7 @@ private structure ArgState where
   batchRows : Option Nat := none
   parallel : Option Nat := none
   extractorConfig : Option Json := none
+  plugins : Array String := #[]
 
 private def resolvePath (cmdRoot : System.FilePath) (path : System.FilePath) : System.FilePath :=
   if path.isAbsolute then path else cmdRoot / path
@@ -61,7 +63,8 @@ private def ArgState.toConfig (s : ArgState) : Except String Config := do
     numShards := s.numShards.getD 128,
     batchRows := s.batchRows.getD 1024,
     parallel := s.parallel.getD 1,
-    extractorConfig := s.extractorConfig.getD <| Json.mkObj []
+    extractorConfig := s.extractorConfig.getD <| Json.mkObj [],
+    plugins := s.plugins.map String.toName
   }
 
 def parseArgs (args : List String) : Except String Config := go args {}
@@ -73,6 +76,8 @@ where
     | "--config" :: jsonStr :: rest, s => do
       let .ok json := Json.parse jsonStr | throw s!"Invalid JSON for --config: '{jsonStr}'"
       go rest { s with extractorConfig := some json }
+    | "--plugin" :: pluginName :: rest, s =>
+      go rest { s with plugins := s.plugins.push pluginName }
     | "--scoutDir" :: path :: rest, s => go rest { s with scoutDir := some <| .mk path }
     | "--cmdRoot" :: path :: rest, s => go rest { s with cmdRoot := some <| .mk path }
     | "--command" :: cmd :: rest, s => go rest { s with command := cmd.toName }
@@ -128,7 +133,7 @@ def run (cfg : Config) : IO UInt32 := do
     | .error err => logError err ; return 1
 
   let extractorCfgs : Array Extractor.Config := targets.map fun tgt =>
-    { command := cfg.command, target := tgt, extractorConfig := cfg.extractorConfig }
+    { command := cfg.command, target := tgt, extractorConfig := cfg.extractorConfig, plugins := cfg.plugins }
 
   let some extractor := (data_extractors).get? cfg.command
     | logError s!"No data extractor found for command '{cfg.command}'" ; return 1

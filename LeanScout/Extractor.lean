@@ -12,6 +12,7 @@ public structure Config where
   command : Command
   target : Target
   extractorConfig : Json := Json.mkObj []
+  plugins : Array Name := #[]
 deriving ToJson, FromJson
 
 public unsafe
