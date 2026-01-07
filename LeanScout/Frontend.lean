@@ -60,12 +60,14 @@ def runCoreM (tgt : ImportsTarget) (opts : Options) (go : CoreM α) : IO α := d
 /--
 Run a `CoreM` computation in parallel for each constant in the environment.
 
-- `maxTasks`: Optional limit on concurrent tasks. `none` means unlimited (all tasks spawned immediately
-  and the function returns without waiting for completion - fire-and-forget mode).
+- `maxTasks`: Optional limit on concurrent tasks. `none` means unlimited (all tasks spawned immediately).
 - `go`: The computation to run for each constant, receiving the environment, constant name, and constant info.
 
-When `maxTasks` is `none`, spawns all tasks immediately and returns without waiting (original behavior).
+When `maxTasks` is `none`, spawns all tasks immediately without waiting (fire-and-forget).
 When `maxTasks` is `some n`, uses a bounded task pool and waits for all tasks to complete.
+
+This function uses `TaskPool.runForM_` internally, which iterates directly over `env.constants`
+without pre-collecting them into an array, making it memory-efficient for large environments.
 -/
 unsafe
 def runParallelCoreM (tgt : ImportsTarget) (opts : Options)
@@ -82,37 +84,8 @@ def runParallelCoreM (tgt : ImportsTarget) (opts : Options)
         options := opts }
     let state : Core.State := { env := env }
 
-    match maxTasks with
-    | none =>
-      -- Unlimited mode: spawn all tasks immediately, don't wait (fire-and-forget)
-      for (n, c) in env.constants do
-        discard <| IO.asTask <| (go env n c |>.toIO ctx state) <&> Prod.fst
-    | some limit =>
-      -- Limited mode: bound concurrency using an inline task pool
-      -- We avoid pre-collecting all constants to prevent stack overflow on large environments
-      let mut activePool : Std.HashMap Nat (Task (Except IO.Error α)) := {}
-      let mut idx := 0
-      for (n, c) in env.constants do
-        -- Wait until we have room in the pool
-        while activePool.size >= limit do
-          for (taskIdx, task) in activePool do
-            if ← IO.hasFinished task then
-              activePool := activePool.erase taskIdx
-          if activePool.size >= limit then
-            IO.sleep 1
-
-        -- Spawn new task
-        let task ← IO.asTask <| (go env n c |>.toIO ctx state) <&> Prod.fst
-        activePool := activePool.insert idx task
-        idx := idx + 1
-
-      -- Wait for remaining tasks to complete
-      while !activePool.isEmpty do
-        for (taskIdx, task) in activePool do
-          if ← IO.hasFinished task then
-            activePool := activePool.erase taskIdx
-        if !activePool.isEmpty then
-          IO.sleep 1
+    let poolConfig : TaskPool.Config := { maxConcurrent := maxTasks }
+    TaskPool.runForM_ env.constants (fun (n, c) => (go env n c |>.toIO ctx state) <&> Prod.fst) poolConfig
 
 end ImportsTarget
 

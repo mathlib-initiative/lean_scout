@@ -205,4 +205,185 @@ where
       | none => orderedResults := orderedResults.push (.error <| IO.userError s!"Missing result for index {idx}")
     return orderedResults
 
+/--
+Run tasks with bounded parallelism over any `ForM`-iterable collection, discarding results.
+
+This variant is useful for large collections (like `Environment.constants`) where
+pre-collecting all items into an array would be expensive or cause memory issues.
+
+- `items`: Any collection with a `ForM IO γ β` instance
+- `spawn`: Function that creates an `IO α` computation from an input (will be wrapped in a Task)
+- `config`: Pool configuration (max concurrency, fail-fast behavior, poll interval)
+- `callbacks`: Optional callbacks for task start/complete events
+-/
+def TaskPool.runForM_ [ForM IO γ β] (items : γ)
+    (spawn : β → IO α)
+    (config : TaskPool.Config := {})
+    (callbacks : TaskPool.Callbacks β α := {}) : IO Unit := do
+
+  match config.maxConcurrent with
+  | none => runUnlimited items spawn callbacks
+  | some 0 => runUnlimited items spawn callbacks  -- treat 0 as unlimited
+  | some limit => runLimited items spawn limit config.failFast config.pollIntervalMs callbacks
+
+where
+  /-- Unlimited mode: spawn all tasks immediately, then wait for all to complete -/
+  runUnlimited (items : γ) (spawn : β → IO α)
+      (callbacks : TaskPool.Callbacks β α) : IO Unit := do
+    let tasksRef ← IO.mkRef #[]
+    let idxRef ← IO.mkRef 0
+
+    -- Spawn all tasks
+    forM items fun item => do
+      let idx ← idxRef.get
+      callbacks.onStart idx item
+      let task ← IO.asTask (spawn item)
+      tasksRef.modify (·.push (idx, item, task))
+      idxRef.set (idx + 1)
+
+    -- Wait for all and call completion callbacks
+    let tasks ← tasksRef.get
+    for (idx, item, task) in tasks do
+      let result ← IO.wait task
+      callbacks.onComplete idx item result
+
+  /-- Limited mode: maintain a pool of at most `limit` concurrent tasks -/
+  runLimited (items : γ) (spawn : β → IO α) (limit : Nat)
+      (failFast : Bool) (pollIntervalMs : UInt32)
+      (callbacks : TaskPool.Callbacks β α) : IO Unit := do
+    -- Track active tasks by their index, along with the original item for callbacks
+    let activePoolRef ← IO.mkRef ({} : Std.HashMap Nat (β × Task (Except IO.Error α)))
+    let idxRef ← IO.mkRef 0
+    let hasErrorRef ← IO.mkRef false
+
+    -- Process items from the ForM iterator
+    forM items fun item => do
+      -- Check fail-fast condition
+      if failFast then
+        if ← hasErrorRef.get then return
+
+      -- Wait until we have room in the pool
+      while (← activePoolRef.get).size >= limit do
+        let activePool ← activePoolRef.get
+        for (taskIdx, (origItem, task)) in activePool do
+          if ← IO.hasFinished task then
+            let result ← IO.wait task
+            callbacks.onComplete taskIdx origItem result
+            activePoolRef.modify (·.erase taskIdx)
+            if let .error _ := result then
+              hasErrorRef.set true
+        if (← activePoolRef.get).size >= limit then
+          IO.sleep pollIntervalMs
+
+      -- Spawn new task
+      let idx ← idxRef.get
+      callbacks.onStart idx item
+      let task ← IO.asTask (spawn item)
+      activePoolRef.modify (·.insert idx (item, task))
+      idxRef.set (idx + 1)
+
+    -- Wait for remaining tasks to complete
+    while !(← activePoolRef.get).isEmpty do
+      let activePool ← activePoolRef.get
+      for (taskIdx, (origItem, task)) in activePool do
+        if ← IO.hasFinished task then
+          let result ← IO.wait task
+          callbacks.onComplete taskIdx origItem result
+          activePoolRef.modify (·.erase taskIdx)
+          if let .error _ := result then
+            hasErrorRef.set true
+      if !(← activePoolRef.get).isEmpty then
+        IO.sleep pollIntervalMs
+
+/--
+Run deferred tasks with bounded parallelism over any `ForM`-iterable collection, discarding results.
+
+This variant accepts task creators that return `IO (Task ...)` instead of `IO α`.
+This is useful when the task creation itself has side effects that should be deferred
+(e.g., spawning subprocesses).
+
+- `items`: Any collection with a `ForM IO γ β` instance
+- `spawnTask`: Function that creates and spawns a Task from an input
+- `config`: Pool configuration (max concurrency, fail-fast behavior, poll interval)
+- `callbacks`: Optional callbacks for task start/complete events
+-/
+def TaskPool.runDeferredForM_ [ForM IO γ β] (items : γ)
+    (spawnTask : β → IO (Task (Except IO.Error α)))
+    (config : TaskPool.Config := {})
+    (callbacks : TaskPool.Callbacks β α := {}) : IO Unit := do
+
+  match config.maxConcurrent with
+  | none => runUnlimited items spawnTask callbacks
+  | some 0 => runUnlimited items spawnTask callbacks  -- treat 0 as unlimited
+  | some limit => runLimited items spawnTask limit config.failFast config.pollIntervalMs callbacks
+
+where
+  /-- Unlimited mode: spawn all tasks immediately, then wait for all to complete -/
+  runUnlimited (items : γ) (spawnTask : β → IO (Task (Except IO.Error α)))
+      (callbacks : TaskPool.Callbacks β α) : IO Unit := do
+    let tasksRef ← IO.mkRef #[]
+    let idxRef ← IO.mkRef 0
+
+    -- Spawn all tasks
+    forM items fun item => do
+      let idx ← idxRef.get
+      callbacks.onStart idx item
+      let task ← spawnTask item
+      tasksRef.modify (·.push (idx, item, task))
+      idxRef.set (idx + 1)
+
+    -- Wait for all and call completion callbacks
+    let tasks ← tasksRef.get
+    for (idx, item, task) in tasks do
+      let result ← IO.wait task
+      callbacks.onComplete idx item result
+
+  /-- Limited mode: maintain a pool of at most `limit` concurrent tasks -/
+  runLimited (items : γ) (spawnTask : β → IO (Task (Except IO.Error α))) (limit : Nat)
+      (failFast : Bool) (pollIntervalMs : UInt32)
+      (callbacks : TaskPool.Callbacks β α) : IO Unit := do
+    -- Track active tasks by their index, along with the original item for callbacks
+    let activePoolRef ← IO.mkRef ({} : Std.HashMap Nat (β × Task (Except IO.Error α)))
+    let idxRef ← IO.mkRef 0
+    let hasErrorRef ← IO.mkRef false
+
+    -- Process items from the ForM iterator
+    forM items fun item => do
+      -- Check fail-fast condition
+      if failFast then
+        if ← hasErrorRef.get then return
+
+      -- Wait until we have room in the pool
+      while (← activePoolRef.get).size >= limit do
+        let activePool ← activePoolRef.get
+        for (taskIdx, (origItem, task)) in activePool do
+          if ← IO.hasFinished task then
+            let result ← IO.wait task
+            callbacks.onComplete taskIdx origItem result
+            activePoolRef.modify (·.erase taskIdx)
+            if let .error _ := result then
+              hasErrorRef.set true
+        if (← activePoolRef.get).size >= limit then
+          IO.sleep pollIntervalMs
+
+      -- Spawn new task
+      let idx ← idxRef.get
+      callbacks.onStart idx item
+      let task ← spawnTask item
+      activePoolRef.modify (·.insert idx (item, task))
+      idxRef.set (idx + 1)
+
+    -- Wait for remaining tasks to complete
+    while !(← activePoolRef.get).isEmpty do
+      let activePool ← activePoolRef.get
+      for (taskIdx, (origItem, task)) in activePool do
+        if ← IO.hasFinished task then
+          let result ← IO.wait task
+          callbacks.onComplete taskIdx origItem result
+          activePoolRef.modify (·.erase taskIdx)
+          if let .error _ := result then
+            hasErrorRef.set true
+      if !(← activePoolRef.get).isEmpty then
+        IO.sleep pollIntervalMs
+
 end LeanScout
