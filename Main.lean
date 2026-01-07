@@ -1,12 +1,13 @@
 module
 
 public import LeanScout
+public import LeanScout.Frontend
 
 namespace LeanScout
 
 namespace Orchestrator
 
-open Lean
+open Lean Elab Frontend
 
 inductive TargetSpec where
   | imports (names : Array String)
@@ -125,7 +126,26 @@ structure Writer where
   wait : IO UInt32
   sink : String → IO Unit
 
--- unsafe because `data_extractors` elaborator runs in meta context
+/-- Load data extractors from plugin modules.
+
+This function imports the specified plugin modules and extracts any
+`DataExtractor` definitions that have been tagged with `@[data_extractor cmd]`.
+Returns an empty HashMap if no plugins are specified.
+-/
+unsafe def loadPluginExtractors (plugins : Array Name) : IO (Std.HashMap Command DataExtractor) := do
+  if plugins.isEmpty then return {}
+  initSearchPath (← findSysroot)
+  enableInitializersExecution
+  let imports := plugins.map fun name => {
+    module := name
+    importAll := true
+    isExported := false
+    isMeta := true : Import
+  }
+  let env ← Lean.importModules (loadExts := true) imports {}
+  loadExtractorsFromEnv env
+
+-- unsafe because `data_extractors` elaborator runs in meta context and we use loadPluginExtractors
 unsafe
 def run (cfg : Config) : IO UInt32 := do
   let targets ← match ← cfg.targetSpec.toTargets.run with
@@ -135,7 +155,14 @@ def run (cfg : Config) : IO UInt32 := do
   let extractorCfgs : Array Extractor.Config := targets.map fun tgt =>
     { command := cfg.command, target := tgt, extractorConfig := cfg.extractorConfig, plugins := cfg.plugins }
 
-  let some extractor := (data_extractors).get? cfg.command
+  -- Load plugin extractors and merge with built-in extractors (plugins take priority)
+  let pluginExtractors ← loadPluginExtractors cfg.plugins
+  let mut allExtractors := pluginExtractors
+  for (cmd, ext) in (data_extractors) do
+    if !allExtractors.contains cmd then
+      allExtractors := allExtractors.insert cmd ext
+
+  let some extractor := allExtractors.get? cfg.command
     | logError s!"No data extractor found for command '{cfg.command}'" ; return 1
 
   let writer? ← match cfg.writerSpec with
