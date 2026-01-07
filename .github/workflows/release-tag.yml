@@ -1,0 +1,19 @@
+name: Tag Lean Release
+
+on:
+  push:
+    branches: [main]
+    paths: [lean-toolchain]
+
+jobs:
+  tag-release:
+    name: Create Lean version tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create release tag
+        uses: leanprover-community/lean-release-tag@v1
+        with:
+          do-release: true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

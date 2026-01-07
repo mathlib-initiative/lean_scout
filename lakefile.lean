@@ -7,9 +7,12 @@ package lean_scout where
   leanOptions := #[
     ⟨`experimental.module, true⟩
   ]
-  testDriver := "LeanScoutTest"
 
 lean_lib LeanScoutTest
+
+@[test_driver]
+lean_exe test_lean_scout where
+  root := `TestLeanScout
 
 @[default_target]
 lean_lib LeanScout
