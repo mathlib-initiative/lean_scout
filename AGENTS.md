@@ -34,6 +34,7 @@ lake run scout --command types --parquet --imports Lean  # Example extractor inv
 - Write short, imperative commit subjects (<72 chars). Prefix with a scope when helpful (`chore:`, `fix:`, `feat:`) to mirror existing history.
 - PRs should describe intent, list key changes, and call out user-visible impacts (new CLI flags, data schema changes). Link issues/tickets when available.
 - Include run results for relevant commands (`lake test`, `uv run pytest ...`, or `./run_tests`), plus notes on data output expectations if applicable. Update docs/README when CLI or extractor behavior changes.
+- Make separate commits for each logical change rather than amending and force-pushing. This preserves history and makes review easier.
 
 # Agent Guidance
 
