@@ -9,3 +9,4 @@ public import LeanScout.Types
 public import LeanScout.Schema
 public import LeanScout.Extractor
 public import LeanScout.Subprocess
+public import LeanScout.TaskPool

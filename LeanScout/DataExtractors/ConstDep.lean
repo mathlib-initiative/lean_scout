@@ -21,7 +21,8 @@ public unsafe def constDep : DataExtractor where
     let filter? := match config.getObjValAs? Bool "filter" with
       | .ok b => b
       | .error _ => false
-    discard <| tgt.runParallelCoreM opts fun env n c => Meta.MetaM.run' do
+    let taskLimit? := config.getObjValAs? Nat "taskLimit" |>.toOption
+    tgt.runParallelCoreM opts (maxTasks := taskLimit?) fun env n c => Meta.MetaM.run' do
       if filter? && (← declNameFilter n) then return
       let mod : Option Name := match env.getModuleIdxFor? n with
         | some idx => env.header.moduleNames[idx]!
