@@ -149,48 +149,37 @@ go (writer : Writer) (extractorCfgs : Array Extractor.Config) : IO UInt32 := do
 
   let writer : Std.Mutex Writer ← Std.Mutex.new <| writer
 
-  let mut launches : Array (String × IO (Task <| Except IO.Error UInt32)) := #[]
-  for extractorCfg in extractorCfgs do
-    let cfgArg := Lean.toJson extractorCfg |>.compress
-    let args : Array String := #[
-      "exe", "-q", "lean_scout_extractor", cfgArg
-    ]
-    let task := subprocessLines "lake" args fun s => writer.atomically get >>= fun w => w.sink s
-    launches := launches.push (cfgArg, task)
+  -- Build array of (configArg, taskSpawner) pairs
+  let launches : Array String := extractorCfgs.map fun extractorCfg =>
+    Lean.toJson extractorCfg |>.compress
 
   logInfo s!"Launching {launches.size} extractor tasks"
 
-  let mut taskPool : Std.HashMap Nat (Task <| Except IO.Error UInt32) := {}
-  let mut launchIdx := 0
-  let mut results : Std.HashMap Nat (Except IO.Error UInt32) := {}
+  -- Define task spawner that creates subprocess for each config
+  let spawnTask := fun (cfgArg : String) => do
+    let args : Array String := #["exe", "-q", "lean_scout_extractor", cfgArg]
+    subprocessLines "lake" args fun s => writer.atomically get >>= fun w => w.sink s
 
-  while launchIdx < launches.size || !taskPool.isEmpty do
+  -- Define callbacks for logging
+  let callbacks : TaskPool.Callbacks String UInt32 := {
+    onStart := fun idx cfgArg => logInfo s!"Started extractor task {idx} with config {cfgArg}"
+    onComplete := fun idx _ result => match result with
+      | .ok code => logInfo s!"Extractor task {idx} finished with exit code {code}"
+      | .error err => logError s!"Extractor task {idx} failed with error: {err}"
+  }
 
-    -- Launch new tasks up to configured parallelism
-    while taskPool.size < cfg.parallel && launchIdx < launches.size do
-      let (cfgArg, task) := launches[launchIdx]!
-      logInfo s!"Started extractor task {launchIdx} with config {cfgArg}"
-      taskPool := taskPool.insert launchIdx (← task)
-      launchIdx := launchIdx + 1
-
-    -- Check for completed tasks
-    for (idx, task) in taskPool do
-      if ← IO.hasFinished task then
-        let res ← IO.wait task
-        match res with
-        | .ok code => logInfo s!"Extractor task {idx} finished with exit code {code}"
-        | .error err => logError s!"Extractor task {idx} failed with error: {err}"
-        results := results.insert idx res
-        taskPool := taskPool.erase idx
-
-    -- Small sleep to avoid busy-waiting
-    IO.sleep 10
+  -- Run with TaskPool
+  let poolConfig : TaskPool.Config := {
+    maxConcurrent := some cfg.parallel
+    pollIntervalMs := 10
+  }
+  let results ← TaskPool.runDeferred launches spawnTask poolConfig callbacks
 
   let writerCode ← writer.atomically <| get >>= fun w => w.wait
 
   -- Check if any extractor failed
   let mut hasFailure := writerCode != 0
-  for (_, res) in results do
+  for res in results do
     match res with
     | .ok code => if code != 0 then hasFailure := true
     | .error _ => hasFailure := true
