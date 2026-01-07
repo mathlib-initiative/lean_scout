@@ -2,7 +2,7 @@ module
 
 public import LeanScout.Types
 
-open Lean
+open Lean Elab Frontend
 
 namespace LeanScout
 
@@ -72,5 +72,27 @@ Fails if any extractor constant cannot be evaluated.
 -/
 @[extern "lean_scout_load_extractors_from_env"]
 public opaque loadExtractorsFromEnv (env : Environment) : IO (Std.HashMap Command DataExtractor)
+
+/-- Load data extractors from plugin modules.
+
+This function imports the specified plugin modules and extracts any
+`DataExtractor` definitions that have been tagged with `@[data_extractor cmd]`.
+Returns an empty HashMap if no plugins are specified.
+
+Fails immediately if any plugin module cannot be loaded or if any extractor
+constant cannot be evaluated.
+-/
+public unsafe def loadPluginExtractors (plugins : Array Name) : IO (Std.HashMap Command DataExtractor) := do
+  if plugins.isEmpty then return {}
+  initSearchPath (← findSysroot)
+  enableInitializersExecution
+  let imports := plugins.map fun name => {
+    module := name
+    importAll := true
+    isExported := false
+    isMeta := true : Import
+  }
+  let env ← Lean.importModules (loadExts := true) imports {}
+  loadExtractorsFromEnv env
 
 end LeanScout
