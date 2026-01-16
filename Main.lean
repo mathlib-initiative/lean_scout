@@ -43,6 +43,45 @@ private structure ArgState where
   extractorConfig : Option Json := none
   plugins : Array String := #[]
 
+private def helpText : String :=
+  "Lean Scout - extract datasets from Lean projects.
+
+USAGE:
+  lake run scout --command <command> (--parquet | --jsonl) <target> [options]
+
+TARGETS:
+  --imports <module...>   Extract from imported modules (single subprocess).
+  --read <paths...>       Extract from specific files (one subprocess per path).
+  --library <name>        Extract from all modules in a library (via lake query).
+
+OPTIONS:
+  --command <command>     Data extractor command name (e.g. types, tactics, const_dep).
+  --parquet               Write sharded parquet output to --dataDir.
+  --jsonl                 Stream JSON lines to stdout (ignores --dataDir).
+  --dataDir <dir>         Output directory (default: ./data).
+  --numShards <n>         Number of output shards (default: 128).
+  --batchRows <n>         Rows per batch before flush (default: 1024).
+  --parallel <n>          Max concurrent extractor tasks (default: 1).
+  --config <json>         JSON object forwarded to extractor (default: {}).
+  --plugin <module>       Load extractor plugin module (repeatable).
+  --cmdRoot <dir>         Resolve relative paths from this root (default: .).
+  --scoutDir <dir>        Lean Scout package root (required; set by lake run scout).
+  -h, --help              Show this help and exit.
+
+NOTES:
+  Exactly one of --parquet or --jsonl is required.
+  Exactly one target flag is required: --imports, --read, or --library.
+  --imports and --read consume all remaining arguments.
+  Place other flags before the target flag.
+  Relative --read paths and --dataDir are resolved against --cmdRoot.
+  Logging goes to stderr; --jsonl output goes to stdout.
+"
+
+private def printHelp : IO Unit := do
+  let stdout ← IO.getStdout
+  stdout.putStr helpText
+  stdout.flush
+
 private def resolvePath (cmdRoot : System.FilePath) (path : System.FilePath) : System.FilePath :=
   if path.isAbsolute then path else cmdRoot / path
 
@@ -70,6 +109,8 @@ private def ArgState.toConfig (s : ArgState) : Except String Config := do
 def parseArgs (args : List String) : Except String Config := go args {}
 where
   go : List String → ArgState → Except String Config
+    | "--help" :: _, _ => throw helpText
+    | "-h" :: _, _ => throw helpText
     | "--parallel" :: nStr :: rest, s => do
       let some n := nStr.toNat? | throw s!"Invalid value for --parallel: '{nStr}'"
       go rest { s with parallel := some n }
@@ -246,4 +287,9 @@ open LeanScout Orchestrator in
 public unsafe def main (args : List String) : IO UInt32 := do
   match parseArgs args with
   | .ok cfg => run cfg
-  | .error err => logError err ; return 1
+  | .error err =>
+      if err == helpText then
+        printHelp
+        return 0
+      logError err
+      return 1
