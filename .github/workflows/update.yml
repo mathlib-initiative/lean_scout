@@ -9,7 +9,6 @@ jobs:
   update_lean:
     permissions:
       contents: write
-      pull-requests: write
       issues: write
 
     runs-on: ubuntu-latest
@@ -27,5 +26,5 @@ jobs:
         uses: leanprover-community/lean-update@v0.7.0
         with:
           update_if_modified: lean-toolchain
-          on_update_succeeds: pr
+          on_update_succeeds: commit
           on_update_fails: issue
