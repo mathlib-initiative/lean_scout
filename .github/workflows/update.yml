@@ -23,7 +23,7 @@ jobs:
           python-version: "3.13"
 
       - name: Update Lean project
-        uses: leanprover-community/lean-update@v0.7.0
+        uses: leanprover-community/lean-update@5010048b67406bb7481dee769a4dcd1f7e560393
         with:
           update_if_modified: lean-toolchain
           on_update_succeeds: commit
