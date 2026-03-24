@@ -22,9 +22,20 @@ jobs:
           enable-cache: false
           python-version: "3.13"
 
+      - name: Record starting HEAD
+        id: before
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Update Lean project
+        id: lean-update
         uses: leanprover-community/lean-update@5010048b67406bb7481dee769a4dcd1f7e560393
         with:
           update_if_modified: lean-toolchain
           on_update_succeeds: commit
           on_update_fails: issue
+
+      - name: Tag updated toolchain commit
+        if: github.ref == 'refs/heads/main' && steps.lean-update.outputs.result == 'update-success'
+        env:
+          BEFORE_SHA: ${{ steps.before.outputs.sha }}
+        run: bash .github/scripts/tag-toolchain.sh
