@@ -8,28 +8,40 @@ public section
 namespace LeanScout
 namespace DataExtractors
 
--- A more agressive Variant of `Lean.Name.isBlackListed`.
--- TODO: We need a more robust way to ignore internal constants.
+-- A more aggressive variant of Lean's own completion blacklist.
+--
+-- We start from `Lean.Meta.allowCompletion`, but close the predicate under
+-- prefixes so that descendants of filtered declarations are filtered as well
+-- (e.g. `Nat.brecOn.eq`, `...match_3.congr_eq_2`). We also keep a small set of
+-- project-specific exclusions that Lean does not blacklist for completion.
+private def isExtraFilteredLeaf : Name → Bool
+  | .str _ s =>
+      s == "inj" ||
+      s == "injEq" ||
+      s == "sizeOf_spec" ||
+      s == "toCtorIdx"
+  | _ => false
+
+private def hasFilteredNamespace (declName : Name) : Bool :=
+  declName.components.contains `Grind || declName.components.contains `Omega
+
+private def anyPrefix (declName : Name) (p : Name → Bool) : Bool :=
+  p declName || match declName with
+    | .anonymous => false
+    | .str pre _ => anyPrefix pre p
+    | .num pre _ => anyPrefix pre p
+
+def declNameFilterCore (env : Environment) (declName : Name) : Bool :=
+  hasFilteredNamespace declName ||
+  anyPrefix declName fun n =>
+    n == ``sorryAx ||
+    n.isInternalDetail ||
+    isPrivateName n ||
+    !Lean.Meta.allowCompletion env n ||
+    isExtraFilteredLeaf n
+
 def declNameFilter {m} [Monad m] [MonadEnv m] (declName : Name) : m Bool := do
-  if declName == ``sorryAx then return true
-  if declName matches .str _ "inj" then return true
-  if declName matches .str _ "injEq" then return true
-  if declName matches .str _ "rec" then return true
-  if declName matches .str _ "recOn" then return true
-  if declName matches .str _ "sizeOf_spec" then return true
-  if declName matches .str _ "brecOn" then return true
-  if declName matches .str _ "casesOn" then return true
-  if declName matches .str _ "toCtorIdx" then return true
-  if declName matches .str _ "noConfusionType" then return true
-  if declName.components.contains `Grind then return true
-  if declName.components.contains `Omega then return true
-  if declName.isInternalDetail then return true
-  let env ← getEnv
-  if isAuxRecursor env declName then return true
-  if isNoConfusion env declName then return true
-  if ← isRec declName then return true
-  if ← Meta.isMatcher declName then return true
-  return false
+  return declNameFilterCore (← getEnv) declName
 
 def tacFilter : Lean.SyntaxNodeKinds := [
   `Lean.Parser.Term.byTactic,
