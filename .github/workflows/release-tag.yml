@@ -4,16 +4,95 @@ on:
   push:
     branches: [main]
     paths: [lean-toolchain]
+  workflow_run:
+    workflows: ["Update Lean Project"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      before:
+        description: Optional exclusive lower-bound commit SHA/ref. Defaults to the parent of the selected after commit.
+        required: false
+        type: string
+      after:
+        description: Optional inclusive upper-bound commit SHA/ref. Defaults to the latest commit on the selected ref that changed lean-toolchain.
+        required: false
+        type: string
 
 jobs:
   tag-release:
     name: Create Lean version tag
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Determine commit range
+        id: range
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "${{ github.event_name }}" in
+            push)
+              before="${{ github.event.before }}"
+              after="${{ github.event.after }}"
+              ;;
+            workflow_run)
+              before="${{ github.event.workflow_run.head_sha }}"
+              after="$(git ls-remote origin "refs/heads/${{ github.event.workflow_run.head_branch }}" | cut -f1)"
+              ;;
+            workflow_dispatch)
+              after="${{ inputs.after }}"
+              if [[ -z "$after" ]]; then
+                after="$(git log -n 1 --format=%H -- lean-toolchain)"
+              fi
+              after="$(git rev-parse "$after")"
+
+              before="${{ inputs.before }}"
+              if [[ -z "$before" ]]; then
+                before="$(git rev-parse "${after}^")"
+              else
+                before="$(git rev-parse "$before")"
+              fi
+              ;;
+            *)
+              echo "Unsupported event: ${{ github.event_name }}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "before=$before" >> "$GITHUB_OUTPUT"
+          echo "after=$after" >> "$GITHUB_OUTPUT"
+          echo "Using range: $before..$after"
+
+      - name: Find lean-toolchain updates in range
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          commits="$(git log --reverse --pretty=format:%H "${{ steps.range.outputs.before }}..${{ steps.range.outputs.after }}" -- lean-toolchain)"
+          if [[ -z "$commits" ]]; then
+            echo "No lean-toolchain changes found in range."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Found lean-toolchain updates in:"
+          printf '%s\n' "$commits"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
       - name: Create release tag
+        if: steps.changes.outputs.has_changes == 'true'
         uses: leanprover-community/lean-release-tag@v1
         with:
+          before: ${{ steps.range.outputs.before }}
+          after: ${{ steps.range.outputs.after }}
           do-release: true
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
