@@ -5,17 +5,17 @@
 - `LeanScoutTest.lean` contains Lean schema tests run by `lake test` (validates JSON roundtrip for all data extractor schemas).
 - Python parquet writer code is in `src/lean_scout/` (`parquet_writer.py`, `cli.py`); packaged via `pyproject.toml`.
 - Tests are split by layer: Lean schema checks via `lake test` (`LeanScoutTest.lean`); Python parquet writer tests in `test/internals/`; Lean orchestrator integration tests in `test/integration/`; end-to-end extractor tests plus fixtures in `test/extractors/` and `test/fixtures/`. Sample Lean project for integration lives in `test_project/`.
-- Generated parquet outputs and temporary shards should stay out of version control; configure outputs with `--dataDir` when running commands and use `--cmdRoot` to anchor relative inputs/outputs to the invocation directory when calling from wrappers.
+- Generated parquet outputs and temporary shards should stay out of version control; configure outputs with `--dataDir` when running commands and use `--cmdRoot` to anchor relative inputs/outputs to the invocation directory when running from automation or outside the project root.
 
 ## Build, Test, and Development Commands
-Run everything from the repo root (requires `elan`/`lake`, Lean `v4.26.0-rc1`, and `uv`):
+Run everything from the repo root (requires `elan`/`lake`, the Lean toolchain tracked in `lean-toolchain` currently `v4.29.0-rc7`, and `uv`):
 ```bash
 lake build                                       # Build Lean libraries and the lean_scout exe
 lake test                                        # Lean schema roundtrip/unit checks
 uv run pytest test/internals -v                  # Python parquet writer tests
 ./test/integration/test_lean_orchestrator.sh    # Lean orchestrator integration tests
 uv run pytest test/extractors -v                 # Data extractor tests against fixtures
-./run_tests                                      # Full four-phase suite (Lean + Python)
+./run_tests                                      # Main automated suite (ruff, mypy, build, Python, integration, extractors)
 lake run scout --command types --parquet --imports Lean  # Example extractor invocation
 ```
 
@@ -44,7 +44,7 @@ Lean Scout creates datasets from Lean4 projects by extracting structured data (t
 **Architecture:** Lean orchestrator (`Main.lean`) drives Lean subprocesses that emit JSON; for Parquet output, a Python subprocess (`cli.py`) ingests the JSON and writes to sharded Parquet files; for JSONL output, the Lean orchestrator writes directly to stdout.
 
 ## Requirements
-- Lean4 via `elan`/`lake`/`lean` (tracked in `lean-toolchain`: `v4.26.0-rc1`)
+- Lean4 via `elan`/`lake`/`lean` (tracked in `lean-toolchain`: `v4.29.0-rc7`)
 - `uv` package manager
 - Python `>=3.13` (per `pyproject.toml`) with deps: `datasets`, `pyarrow`, `pydantic`, `tqdm`
 
@@ -69,14 +69,14 @@ Lean Scout creates datasets from Lean4 projects by extracting structured data (t
 - Lean orchestrator: `./test/integration/test_lean_orchestrator.sh`
 - Extractors: `uv run pytest test/extractors/ -v`
 
-Four-phase suite: Lean schema roundtrips (`LeanScoutTest.lean`), Python parquet writer, Lean orchestrator CLI integration, extractor outputs against fixtures and the `test_project/` dependency project.
+Current automation split: run `lake test` for Lean schema roundtrips (`LeanScoutTest.lean`), and `./run_tests` for linting, mypy, `test_project` build, Python parquet writer checks, Lean orchestrator CLI integration, and extractor outputs against fixtures plus the `test_project` dependency project.
 
 ## Architecture Details
 - Core Lean type: `DataExtractor` (schema, shard key, extractor function). Registered via `@[data_extractor cmd]` and discovered at compile time.
 - Targets: `.imports` (single subprocess; used by `types`, `const_dep`) vs `.input` (per-file subprocess; used by `--read`, `--library` with `tactics`).
 - Writer: `ShardedParquetWriter` (Python) hashes the key field (BLAKE2b) to shards; used by Lean orchestrator via subprocess.
 - Lake config: `scout` lake script adds `--scoutDir` automatically; `module_paths` facet exposes library file lists via `lake query -q <lib>:module_paths`.
-- Convenience script: `extract.sh` creates a temporary subproject, builds `lean_scout`, then runs `lake run scout`. Pass `--dataDir` to place outputs somewhere persistent; the default temp directory is ephemeral.
+- External projects should add `lean_scout` as a Lake dependency and run `lake run scout` directly. Pass `--cmdRoot` when invoking from CI or any working directory other than the project root so relative inputs and outputs stay anchored correctly.
 - CLI flags: Target flags (`--imports`, `--library`, `--read`) consume all remaining arguments; place other flags before them.
 
 ## Adding Extractors

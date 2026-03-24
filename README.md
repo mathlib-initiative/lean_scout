@@ -5,22 +5,43 @@ Lean Scout is a tool for creating datasets from Lean projects.
 ## Requirements
 
 To use this tool, you must have:
-- A basic Lean4 installation, including `elan`, `lake`, and `lean`. We currently support `leanprover/lean4:v4.26.0-rc2`.
+- A basic Lean4 installation, including `elan`, `lake`, and `lean`. The supported toolchain is tracked in `lean-toolchain` (currently `leanprover/lean4:v4.29.0-rc7`).
+- Python 3.13+.
 - The `uv` Python package manager.
 
 ## Quickstart
 
-From the root of a Lean4 project, use the extraction script against one of your libraries (here, `MyLibrary`):
-```bash
-curl -fsSL mathlib-initiative.github.io/lean_scout/extract.sh | bash -s -- --command tactics --parquet --library MyLibrary
+Add Lean Scout as a dependency in your project.
+
+### `lakefile.toml`
+```toml
+[[require]]
+name = "lean_scout"
+git = "https://github.com/mathlib-initiative/lean_scout.git"
+rev = "main" # Prefer pinning to a release tag or commit in production
 ```
-Swap the flags after `--` for any invocation (e.g., `--parquet`, `--jsonl`, `--read`, `--imports`, `--dataDir`, shard counts). The wrapper reads `lake-manifest.json` and `lean-toolchain` from your current working directory and passes that directory as `--cmdRoot`, so it must be invoked from a Lean4 project root.
-It creates a temporary Lean project with LeanScout and your project as dependencies and runs the LeanScout CLI from there with the appropriate `--cmdRoot`.
 
-## Github action
+### `lakefile.lean`
+```lean
+require lean_scout from git
+  "https://github.com/mathlib-initiative/lean_scout.git" @ "main"
+```
 
-The script `extract.sh` can be used to easily set up a Github action that extracts data from a Lean4 project and uploads it to huggingface.
-Here is an example of such a script:
+Then, from the root of your Lean4 project, run Lean Scout directly via Lake:
+```bash
+lake update
+lake run scout --command tactics --parquet --library MyLibrary
+```
+
+Swap the flags for any invocation (e.g. `--parquet`, `--jsonl`, `--read`, `--imports`, `--dataDir`, shard counts).
+
+> **Note**: The old hosted `extract.sh` wrapper has been removed. Add Lean Scout as a normal Lake dependency and invoke `lake run scout ...` directly.
+
+If you invoke Lean Scout from outside your project root (for example from CI with a different working directory or from another script), pass `--cmdRoot /path/to/project/root` so relative `--read` inputs and output paths stay anchored to that directory.
+
+## GitHub Actions
+
+You can run Lean Scout directly inside CI once your project declares `lean_scout` as a Lake dependency. Here is an example workflow that extracts data from a Lean4 project and uploads it to Hugging Face:
 ```yml
 name: Upload Lean dataset to HuggingFace Hub
 
@@ -41,11 +62,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: leanprover/lean-action@v1
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.13"
 
       - name: Create temp directory
         id: tempdir
@@ -53,7 +76,7 @@ jobs:
 
       - name: Generate parquet files
         run: |
-          curl -fsSL mathlib-initiative.github.io/lean_scout/extract.sh | bash -s -- \
+          lake run scout \
             --command types \
             --parquet \
             --dataDir "${{ steps.tempdir.outputs.path }}" \
@@ -77,16 +100,19 @@ jobs:
             "${{ steps.tempdir.outputs.path }}" \
             --repo-type dataset \
             --private \
-            --commit-message "Update dataset from ${{ github.sha }}" \
+            --commit-message "Update dataset from ${{ github.sha }}"
 ```
-To use this in your own Lean4 project on Github, you must:
-- Set up your huggingface (writing) token as a repo secret under `HF_TOKEN`.
-- Change `HF_DATASET_NAME: my-dataset` to the name of the dataset you want to save.
-- Change the parameters passed to the extraction script. The current options will extract data about types contained in the environment obtained by importing `MyLeanModule`.
+
+To use this in your own Lean4 project on GitHub, you must:
+- Add Lean Scout as a Lake dependency in your project.
+- Set up your Hugging Face write token as a repository secret under `HF_TOKEN`.
+- Change `HF_DATASET_NAME: my-dataset` to the dataset you want to update.
+- Change the parameters passed to `lake run scout`. The current options extract data about types contained in the environment obtained by importing `MyLeanModule`.
+- If your workflow runs from a different working directory, pass `--cmdRoot "$GITHUB_WORKSPACE"` (or another appropriate project root) to keep relative paths anchored correctly.
 
 ## Basic usage
 
-To use Lean Scout, add this repo as a dependency in your Lean4 project.
+Once Lean Scout is available as a dependency, run it from your Lean4 project root.
 
 ### Extract from imports
 ```bash
@@ -105,7 +131,6 @@ lake run scout --command tactics --parquet --parallel 4 --read File1.lean File2.
 
 # Extract from entire library (recommended for large codebases)
 lake run scout --command tactics --parquet --parallel 8 --library LeanScoutTest
-
 ```
 
 If you have Lean Scout as a dependency with `Mathlib` as another dependency, you can similarly run:
@@ -120,9 +145,9 @@ lake run scout --command types --parquet --dataDir $HOME/storage/types --imports
 ```
 
 This will write the data to files located within the `$HOME/storage/types/` directory.
-The default location is `./data/`
+The default location is `./data/`.
 
-By default Lean Scout resolves both outputs and relative read targets from the directory where you invoke the command (`--cmdRoot`, default: current working directory). If you run via a wrapper script or from outside the Lean project root, pass `--cmdRoot /path/to/where/paths/are/relative` so relative `--read` paths and outputs stay anchored to that location.
+By default Lean Scout resolves both outputs and relative read targets from the directory where you invoke the command (`--cmdRoot`, default: current working directory). If you run from outside the project root or from automation that changes the working directory, pass `--cmdRoot /path/to/where/paths/are/relative` so relative `--read` paths and outputs stay anchored to that location.
 
 If you stop an extraction early (for example with `Ctrl+C`), Lean Scout leaves the partially written Parquet directory on disk; rerunning with the same `--command` and `--dataDir` will fail with a "Data directory … already exists" error. Remove the previous output directory or point `--dataDir` to a fresh location before retrying.
 If the extraction exits because of an error, Lean Scout removes the partially written directory for you; manual cleanup is only required when you interrupt the run yourself.
@@ -180,7 +205,7 @@ lake run scout --config '{"filter": false}' --command tactics --parquet --librar
 
 ## Sharding
 
-By default, data is organized into 128 parquet shards. 
+By default, data is organized into 128 parquet shards.
 The shard associated with a datapoint is computed by hashing a key, which is specified directly in each data extractor.
 The number of shards used can be controlled with the `--numShards` option:
 ```bash
@@ -286,15 +311,17 @@ The orchestration logic is implemented in `Main.lean`, with the Parquet writing 
 
 ### Running Tests
 
+For broad coverage, run both:
 ```bash
-# Run all tests (all four phases)
-./run_tests
+lake test                                        # Lean schema tests (LeanScoutTest.lean)
+./run_tests                                      # Main automation suite (ruff, mypy, build, internals, integration, extractors)
+```
 
-# Run individual phases
-lake test                                        # Phase 0: Lean schema tests (LeanScoutTest.lean)
-uv run pytest test/internals/ -v                 # Phase 1: Python parquet writer tests
-./test/integration/test_lean_orchestrator.sh    # Phase 2: Lean orchestrator integration tests
-uv run pytest test/extractors/ -v                # Phase 3: End-to-end extractor tests
+To run individual components:
+```bash
+uv run pytest test/internals/ -v                 # Python parquet writer tests
+./test/integration/test_lean_orchestrator.sh     # Lean orchestrator integration tests
+uv run pytest test/extractors/ -v                # End-to-end extractor tests
 ```
 
 ### Lean Schema Tests
