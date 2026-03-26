@@ -8,6 +8,7 @@ property_checks:
     properties:
       module: "LeanScoutTestProject.Basic"
       module_not_null: true
+      allowCompletion: true
       deps_contains_all:
         - "Nat"
         - "Eq"
@@ -16,12 +17,14 @@ property_checks:
     properties:
       module: "LeanScoutTestProject.Basic"
       module_not_null: true
+      allowCompletion: true
       deps_contains: "Nat.zero_add"
 
   - name: "add_comm"
     properties:
       module: "LeanScoutTestProject.Basic"
       module_not_null: true
+      allowCompletion: true
       deps_contains_all:
         - "Nat.zero_add"
         - "Nat.add_zero"
@@ -32,15 +35,23 @@ property_checks:
     properties:
       module: "LeanScoutTestProject.Lists"
       module_not_null: true
+      allowCompletion: true
       deps_contains: "List"
 
   - name: "list_map_nil"
     properties:
       module: "LeanScoutTestProject.Lists"
       module_not_null: true
+      allowCompletion: true
       deps_contains_all:
         - "List"
         - "List.map"
+
+  - name: "OfScientific.ctorIdx"
+    properties:
+      module: "Init.Data.OfScientific"
+      module_not_null: true
+      allowCompletion: false
 
 # Count checks: verify dataset statistics
 count_checks:

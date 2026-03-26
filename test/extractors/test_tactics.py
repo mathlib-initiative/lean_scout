@@ -131,6 +131,13 @@ def test_tactics_dataset_record_schema(tactics_dataset):
     assert isinstance(first_record['kind'], str)
 
 
+def test_tactics_includes_structural_kinds(tactics_dataset):
+    kinds = set(tactics_dataset['kind'])
+
+    assert 'Lean.Parser.Term.byTactic' in kinds
+    assert 'Lean.Parser.Tactic.tacticSeq' in kinds
+
+
 def test_tactics_induction(tactics_dataset):
     induction_records = get_records_by_tactic_contains(tactics_dataset, "induction")
 

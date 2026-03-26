@@ -264,12 +264,24 @@ echo ""
 # --- Config Validation Tests ---
 echo "Config Validation:"
 
-run_test "types rejects wrong config type" \
-    "lake run scout --config '{\"filter\":\"notbool\"}' --command types --jsonl --imports LeanScoutTestProject" \
+run_test "types rejects removed filter field" \
+    "lake run scout --config '{\"filter\":true}' --command types --jsonl --imports LeanScoutTestProject" \
     1 "Invalid config"
+
+run_test "types rejects wrong taskLimit type" \
+    "lake run scout --config '{\"taskLimit\":\"notnat\"}' --command types --jsonl --imports LeanScoutTestProject" \
+    1 "Invalid config"
+
+run_test "const_dep accepts taskLimit config" \
+    "lake run scout --config '{\"taskLimit\":1}' --command const_dep --jsonl --imports LeanScoutTestProject" \
+    0 ""
 
 run_test "const_dep rejects wrong taskLimit type" \
     "lake run scout --config '{\"taskLimit\":\"notnat\"}' --command const_dep --jsonl --imports LeanScoutTestProject" \
+    1 "Invalid config"
+
+run_test "tactics rejects removed filter field" \
+    "lake run scout --config '{\"filter\":true}' --command tactics --jsonl --read LeanScoutTestProject/Basic.lean" \
     1 "Invalid config"
 
 run_test "tactics rejects unknown config fields" \

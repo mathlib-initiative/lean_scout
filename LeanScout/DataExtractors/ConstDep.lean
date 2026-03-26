@@ -14,24 +14,25 @@ public unsafe def constDep : DataExtractor where
     { name := "name", nullable := false, type := .string },
     { name := "module", nullable := true, type := .string },
     { name := "deps", nullable := false, type := .list .string },
+    { name := "allowCompletion", nullable := false, type := .bool },
   ]
   key := "name"
   go config sink opts
   | .imports tgt => do
-    let cfg ← match parseFilterTaskLimitConfig "const_dep" config with
+    let cfg ← match parseTaskLimitConfig "const_dep" config with
       | .ok cfg => pure cfg
       | .error err => throw <| IO.userError err
     tgt.runParallelCoreM opts (maxTasks := cfg.taskLimit) fun env n c => Meta.MetaM.run' do
-      if cfg.filter && (← declNameFilter n) then return
       let mod : Option Name := match env.getModuleIdxFor? n with
         | some idx => env.header.moduleNames[idx]!
         | none => if env.constants.map₂.contains n then env.header.mainModule else none
-      let deps : Array String ← c.getUsedConstantsAsSet.toArray |>.filterMapM fun nm => do
-        if cfg.filter && (← declNameFilter nm) then return none else return nm.toString
+      let deps : Array String := c.getUsedConstantsAsSet.toArray.map fun nm => nm.toString
+      let allowCompletion := Lean.Meta.allowCompletion env n
       sink <| json% {
         name : $(n),
         module : $(mod),
-        deps : $(deps)
+        deps : $(deps),
+        allowCompletion : $(allowCompletion)
       }
   | _ => throw <| IO.userError "Unsupported Target"
 

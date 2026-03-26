@@ -98,6 +98,12 @@ def test_types_imports_properties(types_dataset_imports, types_spec):
         if props.get('module_not_null'):
             assert_record_not_null(actual, 'module')
 
+        if 'allowCompletion' in props:
+            assert actual['allowCompletion'] == props['allowCompletion'], (
+                f"allowCompletion mismatch for {name}: "
+                f"expected {props['allowCompletion']}, got {actual['allowCompletion']}"
+            )
+
 
 def test_types_imports_count_min_records(types_dataset_imports, types_spec):
     counts = types_spec['count_checks']
@@ -128,10 +134,12 @@ def test_types_imports_schema(types_dataset_imports):
     assert 'name' in first_record
     assert 'module' in first_record
     assert 'type' in first_record
+    assert 'allowCompletion' in first_record
 
     assert isinstance(first_record['name'], str)
     assert first_record['module'] is None or isinstance(first_record['module'], str)
     assert isinstance(first_record['type'], str)
+    assert isinstance(first_record['allowCompletion'], bool)
 
 
 def test_types_imports_modules(types_dataset_imports):
@@ -183,8 +191,10 @@ def test_types_jsonl_output_format(types_jsonl_records):
     for record in types_jsonl_records:
         assert "name" in record, "Record should have 'name' field"
         assert "type" in record, "Record should have 'type' field"
+        assert "allowCompletion" in record, "Record should have 'allowCompletion' field"
         assert isinstance(record["name"], str)
         assert isinstance(record["type"], str)
+        assert isinstance(record["allowCompletion"], bool)
 
 
 def test_types_jsonl_has_expected_records(types_jsonl_records):
@@ -203,6 +213,13 @@ def test_types_jsonl_record_content(types_jsonl_records):
 
     assert add_zero["module"] == "LeanScoutTestProject.Basic"
     assert "Nat" in add_zero["type"]
+    assert add_zero["allowCompletion"] is True
+
+
+def test_types_known_non_completion_record(types_dataset_imports):
+    record = get_record_by_name(types_dataset_imports, "OfScientific.ctorIdx")
+    assert record is not None, "Should find OfScientific.ctorIdx record"
+    assert record["allowCompletion"] is False
 
 
 def test_types_jsonl_no_output_directory_created():

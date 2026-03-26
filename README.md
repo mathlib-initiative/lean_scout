@@ -189,28 +189,36 @@ Lean Scout supports multiple extraction modes:
 Extractors can be configured using the `--config` flag, which accepts a JSON object:
 
 ```bash
-lake run scout --config '{"filter": true}' --command types --parquet --imports Lean
+lake run scout --config '{"taskLimit": 8}' --command types --parquet --imports Lean
 ```
 
+### Filtering philosophy
+
+Built-in extractors do **not** filter data during extraction.
+Instead, they emit enough metadata for users to filter downstream in whatever way matches their use case.
+
+In other words:
+- extraction should preserve the raw data
+- built-in extractors should expose useful filter metadata
+- filtering policy belongs to downstream consumers, not the extraction step
+
 Built-in extractors validate config strictly. Unknown keys and values of the wrong type are treated as extraction errors and cause a nonzero exit code.
+
+**Breaking change**: built-in `filter` config is no longer supported. Filtering should now be done downstream using emitted metadata such as `allowCompletion` and `kind`.
 
 ### Available Configuration Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `filter` | boolean | `false` | When `true`, filters out internal/auto-generated declarations (for `types` / `const_dep`) or common tactic syntax nodes (for `tactics`) |
 | `taskLimit` | natural number | unset | Maximum number of concurrent per-constant worker tasks for imports-mode extractors (`types`, `const_dep`) |
 
 **Examples**:
 ```bash
-# Enable filtering to exclude internal declarations
-lake run scout --config '{"filter": true}' --command types --parquet --imports Lean
-
-# Bound imports-mode worker parallelism
+# Bound imports-mode worker parallelism for imports-mode extractors
 lake run scout --config '{"taskLimit": 8}' --command const_dep --parquet --imports Lean
 
-# Disable filtering to get all tactic nodes (default behavior)
-lake run scout --config '{"filter": false}' --command tactics --parquet --library MyLib
+# Tactics accepts an empty config only; filter downstream on `kind`
+lake run scout --command tactics --parquet --library MyLib
 ```
 
 ## Sharding
@@ -240,10 +248,15 @@ lake run scout --command types --parquet --imports Lean
 - `name` (string): Constant name
 - `module` (string, nullable): Module containing the constant
 - `type` (string): Type signature
+- `allowCompletion` (bool): Whether `Lean.Meta.allowCompletion` holds for the constant
 
 **Configuration**:
-- `filter` (default: `false`): When `true`, excludes internal declarations like recursors, `noConfusion`, matchers, and other auto-generated constants
 - `taskLimit` (optional natural number): Bounds concurrent per-constant worker tasks during imports-mode extraction
+
+**Downstream filtering example**:
+```python
+filtered = dataset.filter(lambda x: x["allowCompletion"])
+```
 
 ### `tactics`
 Extracts tactic invocations with goal states, used constants, elaborator info, and syntax kinds.
@@ -264,7 +277,12 @@ lake run scout --command tactics --parquet --parallel 4 --library LeanScoutTest
 - `kind` (string): Non-null syntax node kind for the tactic
 
 **Configuration**:
-- `filter` (default: `false`): When `true`, excludes common structural tactic nodes like `byTactic`, `tacticSeq`, identifiers, and punctuation
+- no built-in extractor-specific options; config must be `{}`
+
+**Downstream filtering example**:
+```python
+structural = dataset.filter(lambda x: x["kind"] == "Lean.Parser.Tactic.tacticSeq")
+```
 
 ### `const_dep`
 Extracts constant dependency information, mapping each constant to the set of constants it uses.
@@ -280,10 +298,16 @@ lake run scout --command const_dep --parquet --imports Lean
 - `name` (string): Constant name
 - `module` (string, nullable): Module containing the constant
 - `deps` (list of strings): Names of constants directly used by this constant
+- `allowCompletion` (bool): Whether `Lean.Meta.allowCompletion` holds for the parent constant
 
 **Configuration**:
-- `filter` (default: `false`): When `true`, excludes internal declarations (recursors, matchers, `noConfusion`, etc.) from both the extracted constants and their dependency lists
 - `taskLimit` (optional natural number): Bounds concurrent per-constant worker tasks during imports-mode extraction
+
+**Downstream filtering example**:
+```python
+filtered_rows = dataset.filter(lambda x: x["allowCompletion"])
+# If you need dependency-level metadata, join dependency names against `types` output.
+```
 
 ## Creating datasets
 
