@@ -153,8 +153,7 @@ By default Lean Scout resolves both outputs and relative read targets from the d
 
 Lean Scout is strict about extraction failures: if any extractor subprocess or the Parquet writer fails, the overall run returns a nonzero exit code, stops launching new targets after the first detected failure, and cancels already-running extractor subprocesses as aggressively as possible.
 
-If you stop an extraction early (for example with `Ctrl+C`), Lean Scout leaves the partially written Parquet directory on disk; rerunning with the same `--command` and `--dataDir` will fail with a "Data directory … already exists" error. Remove the previous output directory or point `--dataDir` to a fresh location before retrying.
-If the extraction exits because of an error, Lean Scout removes the partially written directory for you; manual cleanup is only required when you interrupt the run yourself.
+If an extraction stops early (for example because of `Ctrl+C` or because the run exits with an error), Lean Scout leaves the output directory on disk. If the failed run wrote partial Parquet files, remove the previous output directory or point `--dataDir` to a fresh location before retrying.
 
 ### JSON lines
 

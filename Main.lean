@@ -165,7 +165,6 @@ def TargetSpec.toTargets : TargetSpec → ExceptT String IO (Array Target)
 structure Writer where
   finish : IO UInt32
   sink : String → IO Unit
-  cleanupOnFailure : IO Unit := pure ()
 
 private def taskFailed : Except IO.Error UInt32 → Bool
   | .ok code => code != 0
@@ -183,21 +182,6 @@ private def ignoreErrors (action : IO Unit) : IO Unit := do
     action
   catch _ =>
     pure ()
-
-private def removeOutputContents (path : System.FilePath) : IO Unit := do
-  if ← path.pathExists then
-    for entry in (← path.readDir) do
-      if ← entry.path.isDir then
-        IO.FS.removeDirAll entry.path
-      else
-        IO.FS.removeFile entry.path
-
-private def cleanupOutputDir (path : System.FilePath) (existedBefore : Bool) : IO Unit := do
-  if ← path.pathExists then
-    if existedBefore then
-      removeOutputContents path
-    else
-      IO.FS.removeDirAll path
 
 -- unsafe because `data_extractors` elaborator runs in meta context and we use loadPluginExtractors
 unsafe
@@ -301,12 +285,6 @@ where
         hasFailure := true
 
     if hasFailure then
-      try
-        writer.atomically do
-          let w ← get
-          w.cleanupOnFailure
-      catch err =>
-        logError s!"Failed to clean up output after extraction failure: {err}"
       return 1
 
     return 0
@@ -320,15 +298,13 @@ where
   }
 
   parquetWriter (cfg : Config) (extractor : DataExtractor) : ExceptT String IO Writer := do
-    let dataDirExisted ← cfg.dataDir.pathExists
-    if dataDirExisted then
+    if ← cfg.dataDir.pathExists then
       let entries ← cfg.dataDir.readDir
       unless entries.isEmpty do
         throw <| s!"Output directory '{cfg.dataDir}' already exists and is not empty"
     logInfo s!"Creating output directory '{cfg.dataDir}'"
     IO.FS.createDirAll cfg.dataDir
 
-    let cleanup := cleanupOutputDir cfg.dataDir dataDirExisted
     let dataDir ← IO.FS.realPath cfg.dataDir
 
     let subprocess ← try
@@ -344,7 +320,6 @@ where
         stdin := .piped
       }
     catch err =>
-      ignoreErrors cleanup
       throw s!"Failed to start parquet writer: {err}"
 
     let (stdin, child) ← subprocess.takeStdin
@@ -360,7 +335,6 @@ where
             h.flush
         | none =>
             throw <| IO.userError "Parquet writer stdin is already closed"
-      cleanupOnFailure := cleanup
     }
 
 end Orchestrator

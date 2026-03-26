@@ -25,8 +25,7 @@ private unsafe def throwIfMessagesHaveErrors
 
 namespace InputTarget
 
-unsafe
- def processCommands (tgt : InputTarget) (opts : Options) (go : State → IO α) : IO α := do
+unsafe def processCommands (tgt : InputTarget) (opts : Options) (go : State → IO α) : IO α := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
   let inputCtx ← tgt.inputCtx
@@ -39,12 +38,10 @@ unsafe
   throwIfMessagesHaveErrors tgt.path "processing" s.commandState.messages
   go s
 
-unsafe
- def withInfoTrees (tgt : InputTarget) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) :=
+unsafe def withInfoTrees (tgt : InputTarget) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) :=
   tgt.processCommands opts fun s => s.commandState.infoState.trees.mapM go
 
-unsafe
- def withVisitM
+unsafe def withVisitM
     (tgt : InputTarget) (opts : Options)
     (preNode : ContextInfo → Info → PersistentArray InfoTree → IO Bool)
     (postNode : ContextInfo → Info → PersistentArray InfoTree → List (Option α) → IO α)
@@ -55,15 +52,13 @@ end InputTarget
 
 namespace ImportsTarget
 
-unsafe
- def withEnv (tgt : ImportsTarget) (opts : Options) (go : Environment → IO α) : IO α := do
+unsafe def withEnv (tgt : ImportsTarget) (opts : Options) (go : Environment → IO α) : IO α := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
   let env ← Lean.importModules (loadExts := true) tgt.imports opts
   go env
 
-unsafe
- def runCoreM (tgt : ImportsTarget) (opts : Options) (go : CoreM α) : IO α := do
+unsafe def runCoreM (tgt : ImportsTarget) (opts : Options) (go : CoreM α) : IO α := do
   let initHeartbeats ← IO.getNumHeartbeats
   tgt.withEnv opts fun env => do
     let ctx : Core.Context := {
@@ -87,8 +82,7 @@ When `maxTasks` is `some n`, uses a bounded task pool and waits for all tasks to
 This function uses `TaskPool.runForMChecked_` internally, which iterates directly over `env.constants`
 without pre-collecting them into an array, making it memory-efficient for large environments.
 -/
-unsafe
- def runParallelCoreM (tgt : ImportsTarget) (opts : Options)
+unsafe def runParallelCoreM (tgt : ImportsTarget) (opts : Options)
     (go : Environment → Name → ConstantInfo → CoreM α)
     (maxTasks : Option Nat := none) :
     IO Unit := do
