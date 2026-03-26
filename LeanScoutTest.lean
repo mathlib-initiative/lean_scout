@@ -24,23 +24,23 @@ def schemaRoundtrip (schema : Schema) : IO Unit := do
   println! "\n"
   println! (← c.stdout.readToEnd).trimAscii
 
-open LeanScout.DataExtractors in
-def declNameFilterRegressionTest : IO Unit := do
+def allowCompletionRegressionTest : IO Unit := do
   initSearchPath (← Lean.findSysroot)
   let env ← importModules #[{ module := `Lean }] {} 0
   let cases : Array (Name × Bool) := #[
-    (`OfScientific.ctorIdx, true),
+    (`OfScientific.ctorIdx, false),
+    (`Nat.rec, false),
+    (`Nat.noConfusion, false),
     (`Nat.brecOn.eq, true),
-    (`Std.DTreeMap.Internal.Impl.balanceL!.match_3.congr_eq_2, true),
-    (`List.map, false),
-    (`Nat.add, false)
+    (`List.map, true),
+    (`Nat.add, true)
   ]
   for (declName, expected) in cases do
-    let actual := declNameFilterCore env declName
+    let actual := Lean.Meta.allowCompletion env declName
     unless actual == expected do
-      throw <| IO.userError s!"declNameFilterCore {declName}: expected {expected}, got {actual}"
+      throw <| IO.userError s!"allowCompletion {declName}: expected {expected}, got {actual}"
 
-#eval declNameFilterRegressionTest
+#eval allowCompletionRegressionTest
 
 /--
 info:

@@ -23,15 +23,14 @@ public unsafe def tactics : DataExtractor where
   key := "ppTac"
   go config sink opts
   | .input tgt => do
-    let cfg ← match parseFilterConfig "tactics" config with
-      | .ok cfg => pure cfg
-      | .error err => throw <| IO.userError err
+    match parseEmptyConfig "tactics" config with
+    | .ok () => pure ()
+    | .error err => throw <| IO.userError err
     discard <| tgt.withVisitM opts (α := Unit) (ctx? := none)
       (fun _ _ _ => return true) fun ctxInfo info _ _ => ctxInfo.runMetaM' {} do
         let .ofTacticInfo info := info | return
         let some (.original ..) := info.stx.getHeadInfo? | return
         let kind := info.stx.getKind
-        if cfg.filter && tacFilter.contains kind then return
         let ppTac : String := toString info.stx.prettyPrint
         let elaborator := info.elaborator
         let goals : List Json ← info.goalsBefore.mapM fun mvarId =>

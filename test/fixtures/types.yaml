@@ -42,12 +42,21 @@ property_checks:
       module_contains: "LeanScoutTestProject"
       type_contains: "Nat"
       module_not_null: true
+      allowCompletion: true
 
   - name: "list_nil_append"
     properties:
       module_contains: "LeanScoutTestProject"
       type_contains: "List"
       module_not_null: true
+      allowCompletion: true
+
+  - name: "OfScientific.ctorIdx"
+    properties:
+      module_contains: "Init.Data.OfScientific"
+      type_contains: "OfScientific"
+      module_not_null: true
+      allowCompletion: false
 
 # Count checks: verify dataset statistics
 count_checks:
