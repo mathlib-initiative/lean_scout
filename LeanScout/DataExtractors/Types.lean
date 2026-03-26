@@ -18,12 +18,11 @@ public unsafe def types : DataExtractor where
   key := "name"
   go config sink opts
   | .imports tgt => do
-    let filter? := match config.getObjValAs? Bool "filter" with
-      | .ok b => b
-      | .error _ => false
-    let taskLimit? := config.getObjValAs? Nat "taskLimit" |>.toOption
-    tgt.runParallelCoreM opts (maxTasks := taskLimit?) fun env n c => Meta.MetaM.run' do
-      if filter? && (← declNameFilter n) then return
+    let cfg ← match parseFilterTaskLimitConfig "types" config with
+      | .ok cfg => pure cfg
+      | .error err => throw <| IO.userError err
+    tgt.runParallelCoreM opts (maxTasks := cfg.taskLimit) fun env n c => Meta.MetaM.run' do
+      if cfg.filter && (← declNameFilter n) then return
       let mod : Option Name := match env.getModuleIdxFor? n with
         | some idx => env.header.moduleNames[idx]!
         | none => if env.constants.map₂.contains n then env.header.mainModule else none

@@ -28,9 +28,12 @@ def extract (cfg : Config): IO UInt32 := do
   let some extractor := allExtractors.get? cfg.command
     | logger.log .error s!"Failed to find extractor {cfg.command}" ; return 1
   let stdout ← IO.getStdout
-  let sink (j : Json) : IO Unit := do
-    stdout.putStrLn j.compress
-    stdout.flush
+  let stdoutMutex : Std.Mutex IO.FS.Stream ← Std.Mutex.new stdout
+  let sink (j : Json) : IO Unit :=
+    stdoutMutex.atomically do
+      let handle ← get
+      handle.putStrLn j.compress
+      handle.flush
   extractor.go cfg.extractorConfig sink {} cfg.target
   return 0
 

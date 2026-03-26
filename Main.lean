@@ -163,8 +163,25 @@ def TargetSpec.toTargets : TargetSpec → ExceptT String IO (Array Target)
     return lines.toArray.map fun s => .read <| System.FilePath.mk s
 
 structure Writer where
-  wait : IO UInt32
+  finish : IO UInt32
   sink : String → IO Unit
+
+private def taskFailed : Except IO.Error UInt32 → Bool
+  | .ok code => code != 0
+  | .error _ => true
+
+private def logTaskResult (idx : Nat) (result : Except IO.Error UInt32) : IO Unit :=
+  match result with
+  | .ok code =>
+      logInfo s!"Extractor task {idx} finished with exit code {code}"
+  | .error err =>
+      logError s!"Extractor task {idx} failed with error: {err}"
+
+private def ignoreErrors (action : IO Unit) : IO Unit := do
+  try
+    action
+  catch _ =>
+    pure ()
 
 -- unsafe because `data_extractors` elaborator runs in meta context and we use loadPluginExtractors
 unsafe
@@ -196,88 +213,129 @@ def run (cfg : Config) : IO UInt32 := do
 
 where
 
-go (writer : Writer) (extractorCfgs : Array Extractor.Config) : IO UInt32 := do
+  go (writer : Writer) (extractorCfgs : Array Extractor.Config) : IO UInt32 := do
+    logInfo s!"Starting data extraction with {extractorCfgs.size} extractor configurations"
 
-  logInfo s!"Starting data extraction with {extractorCfgs.size} extractor configurations"
+    let writer : Std.Mutex Writer ← Std.Mutex.new writer
+    let launches : Array String := extractorCfgs.map fun extractorCfg =>
+      Lean.toJson extractorCfg |>.compress
 
-  let writer : Std.Mutex Writer ← Std.Mutex.new <| writer
+    logInfo s!"Launching {launches.size} extractor tasks"
 
-  -- Build array of (configArg, taskSpawner) pairs
-  let launches : Array String := extractorCfgs.map fun extractorCfg =>
-    Lean.toJson extractorCfg |>.compress
+    let launchExtractor (idx : Nat) (cfgArg : String) : IO RunningSubprocess := do
+      logInfo s!"Started extractor task {idx} with config {cfgArg}"
+      let args : Array String := #["exe", "-q", "lean_scout_extractor", cfgArg]
+      subprocessLines "lake" args fun s =>
+        writer.atomically do
+          let w ← get
+          w.sink s
 
-  logInfo s!"Launching {launches.size} extractor tasks"
+    let cancelRunning (running : Std.HashMap Nat (String × RunningSubprocess)) : IO Unit := do
+      for (_, (_, subprocess)) in running do
+        ignoreErrors subprocess.cancel
 
-  -- Define task spawner that creates subprocess for each config
-  let spawnTask := fun (cfgArg : String) => do
-    let args : Array String := #["exe", "-q", "lean_scout_extractor", cfgArg]
-    subprocessLines "lake" args fun s => writer.atomically get >>= fun w => w.sink s
+    let mut active : Std.HashMap Nat (String × RunningSubprocess) := {}
+    let mut nextIdx := 0
+    let mut hasFailure := false
 
-  -- Define callbacks for logging
-  let callbacks : TaskPool.Callbacks String UInt32 := {
-    onStart := fun idx cfgArg => logInfo s!"Started extractor task {idx} with config {cfgArg}"
-    onComplete := fun idx _ result => match result with
-      | .ok code => logInfo s!"Extractor task {idx} finished with exit code {code}"
-      | .error err => logError s!"Extractor task {idx} failed with error: {err}"
-  }
+    while (!hasFailure && nextIdx < launches.size) || !active.isEmpty do
+      while !hasFailure && nextIdx < launches.size && (cfg.parallel == 0 || active.size < cfg.parallel) do
+        let idx := nextIdx
+        let cfgArg := launches[idx]!
+        try
+          let subprocess ← launchExtractor idx cfgArg
+          active := active.insert idx (cfgArg, subprocess)
+          nextIdx := nextIdx + 1
+        catch err =>
+          logError s!"Failed to start extractor task {idx}: {err}"
+          hasFailure := true
+          nextIdx := nextIdx + 1
+          cancelRunning active
 
-  -- Run with TaskPool
-  let poolConfig : TaskPool.Config := {
-    maxConcurrent := some cfg.parallel
-    pollIntervalMs := 10
-  }
-  let results ← TaskPool.runDeferred launches spawnTask poolConfig callbacks
+      let mut completedAny := false
+      let activeSnapshot := active
+      for (idx, (cfgArg, subprocess)) in activeSnapshot do
+        if ← IO.hasFinished subprocess.task then
+          completedAny := true
+          let result ← subprocess.wait
+          let _ := cfgArg
+          logTaskResult idx result
+          active := active.erase idx
+          if taskFailed result && !hasFailure then
+            hasFailure := true
+            cancelRunning active
 
-  let writerCode ← writer.atomically <| get >>= fun w => w.wait
+      if !active.isEmpty && !completedAny then
+        IO.sleep 10
 
-  -- Check if any extractor failed
-  let mut hasFailure := writerCode != 0
-  for res in results do
-    match res with
-    | .ok code => if code != 0 then hasFailure := true
-    | .error _ => hasFailure := true
+    let writerResult : Except IO.Error UInt32 ← try
+      Except.ok <$> writer.atomically do
+        let w ← get
+        w.finish
+    catch err =>
+      pure (Except.error err)
 
-  if hasFailure then return 1
-  return 0
+    match writerResult with
+    | .ok code =>
+        if code != 0 then
+          logError s!"Writer exited with code {code}"
+          hasFailure := true
+    | .error err =>
+        logError s!"Writer failed with error: {err}"
+        hasFailure := true
 
-jsonlWriter : ExceptT String IO Writer := return {
-  wait := return 0,
-  sink := fun s => do
-    let stdout ← IO.getStdout
-    stdout.putStrLn s
-    stdout.flush
-}
+    if hasFailure then
+      return 1
 
-parquetWriter (cfg : Config) (extractor : DataExtractor) : ExceptT String IO Writer := do
-  if ← cfg.dataDir.pathExists then
-    let entries ← cfg.dataDir.readDir
-    unless entries.isEmpty do
-      throw <| s!"Output directory '{cfg.dataDir}' already exists and is not empty"
-  logInfo s!"Creating output directory '{cfg.dataDir}'"
-  IO.FS.createDirAll cfg.dataDir
-  let dataDir ← IO.FS.realPath cfg.dataDir
-  let subprocess ← IO.Process.spawn {
-    cwd := cfg.scoutDir
-    cmd := "uv"
-    args := #["run", "parquet_writer",
-      "--dataDir", dataDir.toString,
-      "--batchRows", toString cfg.batchRows,
-      "--numShards", toString cfg.numShards,
-      "--key", extractor.key,
-      "--schema", (toJson extractor.schema).compress]
-    stdin := .piped
-  }
-  let (stdin, child) ← subprocess.takeStdin
-  let stdinRef ← IO.mkRef (some stdin)
-  return {
-    wait := do
-      stdinRef.set none
-      child.wait
+    return 0
+
+  jsonlWriter : ExceptT String IO Writer := return {
+    finish := return 0
     sink := fun s => do
-      if let some h ← stdinRef.get then
-        h.putStrLn s
-        h.flush
+      let stdout ← IO.getStdout
+      stdout.putStrLn s
+      stdout.flush
   }
+
+  parquetWriter (cfg : Config) (extractor : DataExtractor) : ExceptT String IO Writer := do
+    if ← cfg.dataDir.pathExists then
+      let entries ← cfg.dataDir.readDir
+      unless entries.isEmpty do
+        throw <| s!"Output directory '{cfg.dataDir}' already exists and is not empty"
+    logInfo s!"Creating output directory '{cfg.dataDir}'"
+    IO.FS.createDirAll cfg.dataDir
+
+    let dataDir ← IO.FS.realPath cfg.dataDir
+
+    let subprocess ← try
+      IO.Process.spawn {
+        cwd := cfg.scoutDir
+        cmd := "uv"
+        args := #["run", "parquet_writer",
+          "--dataDir", dataDir.toString,
+          "--batchRows", toString cfg.batchRows,
+          "--numShards", toString cfg.numShards,
+          "--key", extractor.key,
+          "--schema", (toJson extractor.schema).compress]
+        stdin := .piped
+      }
+    catch err =>
+      throw s!"Failed to start parquet writer: {err}"
+
+    let (stdin, child) ← subprocess.takeStdin
+    let stdinRef ← IO.mkRef (some stdin)
+    return {
+      finish := do
+        stdinRef.set none
+        child.wait
+      sink := fun s => do
+        match ← stdinRef.get with
+        | some h =>
+            h.putStrLn s
+            h.flush
+        | none =>
+            throw <| IO.userError "Parquet writer stdin is already closed"
+    }
 
 end Orchestrator
 
@@ -286,10 +344,15 @@ end LeanScout
 open LeanScout Orchestrator in
 public unsafe def main (args : List String) : IO UInt32 := do
   match parseArgs args with
-  | .ok cfg => run cfg
+  | .ok cfg =>
+      try
+        run cfg
+      catch err =>
+        logError s!"Unhandled orchestrator error: {err}"
+        return (1 : UInt32)
   | .error err =>
       if err == helpText then
         printHelp
         return 0
       logError err
-      return 1
+      return (1 : UInt32)

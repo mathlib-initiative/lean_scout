@@ -7,6 +7,7 @@ import pyarrow as pa
 import pytest
 
 from lean_scout.utils import (
+    MalformedJsonLineError,
     datatype_from_json,
     deserialize_schema,
     field_from_json,
@@ -30,25 +31,28 @@ class TestStreamJsonLines:
         result = list(stream_json_lines(lines))
         assert result == [{"a": 1}, {"b": 2}]
 
-    def test_malformed_json_logged_and_skipped(self, caplog):
-        """Test that malformed JSON is logged and skipped."""
+    def test_malformed_json_raises_in_strict_mode(self):
+        """Test that malformed JSON is fatal in strict mode."""
+        lines = ['{"a": 1}', "not valid json", '{"b": 2}']
+        with pytest.raises(MalformedJsonLineError, match="Malformed JSON at line 2"):
+            list(stream_json_lines(lines))
+
+    def test_malformed_json_logged_and_skipped_in_non_strict_mode(self, caplog):
+        """Test that malformed JSON can still be logged and skipped when requested."""
         lines = ['{"a": 1}', "not valid json", '{"b": 2}']
         with caplog.at_level(logging.WARNING):
-            result = list(stream_json_lines(lines))
+            result = list(stream_json_lines(lines, strict=False))
 
         assert result == [{"a": 1}, {"b": 2}]
-        assert "malformed JSON" in caplog.text
-        assert "line 2" in caplog.text
+        assert "Malformed JSON at line 2" in caplog.text
 
-    def test_long_malformed_line_truncated_in_log(self, caplog):
-        """Test that long malformed lines are truncated in log output."""
+    def test_long_malformed_line_truncated_in_error(self):
+        """Test that long malformed lines are truncated in diagnostics."""
         long_invalid = "x" * 200
-        lines = [long_invalid]
-        with caplog.at_level(logging.WARNING):
-            result = list(stream_json_lines(lines))
+        with pytest.raises(MalformedJsonLineError) as exc_info:
+            list(stream_json_lines([long_invalid]))
 
-        assert result == []
-        assert "..." in caplog.text  # Line was truncated
+        assert "..." in str(exc_info.value)
 
     def test_whitespace_stripped(self):
         """Test that whitespace is stripped from lines."""

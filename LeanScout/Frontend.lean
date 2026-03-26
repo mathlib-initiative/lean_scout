@@ -9,24 +9,39 @@ namespace LeanScout
 
 open Lean Elab Frontend
 
+private unsafe def formatErrorMessages (messages : MessageLog) : IO String := do
+  let mut rendered : List String := []
+  for msg in messages.reportedPlusUnreported do
+    if msg.severity matches .error then
+      rendered := rendered.concat (← msg.toString)
+  return "\n".intercalate rendered
+
+private unsafe def throwIfMessagesHaveErrors
+    (path : System.FilePath) (stage : String) (messages : MessageLog) : IO Unit := do
+  if messages.hasErrors then
+    let rendered := (← formatErrorMessages messages).trimAscii.toString
+    let details := if rendered.isEmpty then "(Lean reported errors, but no messages were rendered)" else rendered
+    throw <| IO.userError s!"Lean reported errors while {stage} '{path}':\n{details}"
+
 namespace InputTarget
 
-unsafe
-def processCommands (tgt : InputTarget) (opts : Options) (go : State → IO α) : IO α := do
+unsafe def processCommands (tgt : InputTarget) (opts : Options) (go : State → IO α) : IO α := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
-  let (header, parserState, messages) ← Parser.parseHeader <| ← tgt.inputCtx
-  let (env, messages) ← processHeader header opts messages <| ← tgt.inputCtx
+  let inputCtx ← tgt.inputCtx
+  let (header, parserState, messages) ← Parser.parseHeader inputCtx
+  throwIfMessagesHaveErrors tgt.path "parsing" messages
+  let (env, messages) ← processHeader header opts messages inputCtx
+  throwIfMessagesHaveErrors tgt.path "processing imports for" messages
   let commandState := { Command.mkState env messages opts with infoState.enabled := true }
-  let s ← IO.processCommands (← tgt.inputCtx) parserState commandState
+  let s ← IO.processCommands inputCtx parserState commandState
+  throwIfMessagesHaveErrors tgt.path "processing" s.commandState.messages
   go s
 
-unsafe
-def withInfoTrees (tgt : InputTarget) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) :=
+unsafe def withInfoTrees (tgt : InputTarget) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) :=
   tgt.processCommands opts fun s => s.commandState.infoState.trees.mapM go
 
-unsafe
-def withVisitM
+unsafe def withVisitM
     (tgt : InputTarget) (opts : Options)
     (preNode : ContextInfo → Info → PersistentArray InfoTree → IO Bool)
     (postNode : ContextInfo → Info → PersistentArray InfoTree → List (Option α) → IO α)
@@ -37,15 +52,13 @@ end InputTarget
 
 namespace ImportsTarget
 
-unsafe
-def withEnv (tgt : ImportsTarget) (opts : Options) (go : Environment → IO α) : IO α := do
+unsafe def withEnv (tgt : ImportsTarget) (opts : Options) (go : Environment → IO α) : IO α := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
   let env ← Lean.importModules (loadExts := true) tgt.imports opts
   go env
 
-unsafe
-def runCoreM (tgt : ImportsTarget) (opts : Options) (go : CoreM α) : IO α := do
+unsafe def runCoreM (tgt : ImportsTarget) (opts : Options) (go : CoreM α) : IO α := do
   let initHeartbeats ← IO.getNumHeartbeats
   tgt.withEnv opts fun env => do
     let ctx : Core.Context := {
@@ -66,11 +79,10 @@ Run a `CoreM` computation in parallel for each constant in the environment.
 When `maxTasks` is `none`, spawns all tasks immediately without waiting (fire-and-forget).
 When `maxTasks` is `some n`, uses a bounded task pool and waits for all tasks to complete.
 
-This function uses `TaskPool.runForM_` internally, which iterates directly over `env.constants`
+This function uses `TaskPool.runForMChecked_` internally, which iterates directly over `env.constants`
 without pre-collecting them into an array, making it memory-efficient for large environments.
 -/
-unsafe
-def runParallelCoreM (tgt : ImportsTarget) (opts : Options)
+unsafe def runParallelCoreM (tgt : ImportsTarget) (opts : Options)
     (go : Environment → Name → ConstantInfo → CoreM α)
     (maxTasks : Option Nat := none) :
     IO Unit := do
@@ -84,8 +96,13 @@ def runParallelCoreM (tgt : ImportsTarget) (opts : Options)
         options := opts }
     let state : Core.State := { env := env }
 
-    let poolConfig : TaskPool.Config := { maxConcurrent := maxTasks }
-    TaskPool.runForM_ env.constants (fun (n, c) => (go env n c |>.toIO ctx state) <&> Prod.fst) poolConfig
+    let poolConfig : TaskPool.Config := {
+      maxConcurrent := maxTasks
+      failFast := true
+    }
+    TaskPool.runForMChecked_ env.constants
+      (fun (n, c) => (go env n c |>.toIO ctx state) <&> Prod.fst)
+      poolConfig
 
 end ImportsTarget
 

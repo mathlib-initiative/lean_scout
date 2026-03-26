@@ -8,6 +8,54 @@ public section
 namespace LeanScout
 namespace DataExtractors
 
+abbrev ConfigObj := Std.TreeMap.Raw String Json compare
+
+structure FilterConfig where
+  filter : Bool := false
+
+structure FilterTaskLimitConfig where
+  filter : Bool := false
+  taskLimit : Option Nat := none
+
+private def getConfigObj (extractorName : String) (config : Json) : Except String ConfigObj :=
+  config.getObj? |>.mapError fun err => s!"Invalid config for extractor '{extractorName}': {err}"
+
+private def rejectUnknownKeys
+    (extractorName : String) (obj : ConfigObj) (allowed : List String) : Except String Unit := do
+  obj.foldlM (init := ()) fun _ key _ => do
+    if allowed.contains key then
+      pure ()
+    else
+      throw s!"Invalid config for extractor '{extractorName}': unknown field '{key}'"
+
+private def getOptionalField [FromJson α]
+    (extractorName : String) (obj : ConfigObj) (field : String) : Except String (Option α) := do
+  match obj[field]? with
+  | none =>
+      pure none
+  | some value =>
+      match fromJson? value with
+      | .ok parsed =>
+          pure (some parsed)
+      | .error err =>
+          throw s!"Invalid config for extractor '{extractorName}', field '{field}': {err}"
+
+public def parseFilterConfig (extractorName : String) (config : Json) : Except String FilterConfig := do
+  let obj ← getConfigObj extractorName config
+  rejectUnknownKeys extractorName obj ["filter"]
+  return {
+    filter := (← getOptionalField extractorName obj "filter").getD false
+  }
+
+public def parseFilterTaskLimitConfig
+    (extractorName : String) (config : Json) : Except String FilterTaskLimitConfig := do
+  let obj ← getConfigObj extractorName config
+  rejectUnknownKeys extractorName obj ["filter", "taskLimit"]
+  return {
+    filter := (← getOptionalField extractorName obj "filter").getD false
+    taskLimit := ← getOptionalField extractorName obj "taskLimit"
+  }
+
 -- A more aggressive variant of Lean's own completion blacklist.
 --
 -- We start from `Lean.Meta.allowCompletion`, but close the predicate under

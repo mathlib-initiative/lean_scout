@@ -133,6 +133,8 @@ lake run scout --command tactics --parquet --parallel 4 --read File1.lean File2.
 lake run scout --command tactics --parquet --parallel 8 --library LeanScoutTest
 ```
 
+For `tactics`, Lean Scout treats syntax, import, elaboration, and type errors in the target file as extraction failures: the run returns a nonzero exit code and no records are emitted for that file.
+
 If you have Lean Scout as a dependency with `Mathlib` as another dependency, you can similarly run:
 ```bash
 lake run scout --command types --parquet --imports Mathlib
@@ -149,8 +151,9 @@ The default location is `./data/`.
 
 By default Lean Scout resolves both outputs and relative read targets from the directory where you invoke the command (`--cmdRoot`, default: current working directory). If you run from outside the project root or from automation that changes the working directory, pass `--cmdRoot /path/to/where/paths/are/relative` so relative `--read` paths and outputs stay anchored to that location.
 
-If you stop an extraction early (for example with `Ctrl+C`), Lean Scout leaves the partially written Parquet directory on disk; rerunning with the same `--command` and `--dataDir` will fail with a "Data directory … already exists" error. Remove the previous output directory or point `--dataDir` to a fresh location before retrying.
-If the extraction exits because of an error, Lean Scout removes the partially written directory for you; manual cleanup is only required when you interrupt the run yourself.
+Lean Scout is strict about extraction failures: if any extractor subprocess or the Parquet writer fails, the overall run returns a nonzero exit code, stops launching new targets after the first detected failure, and cancels already-running extractor subprocesses as aggressively as possible.
+
+If an extraction stops early (for example because of `Ctrl+C` or because the run exits with an error), Lean Scout leaves the output directory on disk. If the failed run wrote partial Parquet files, remove the previous output directory or point `--dataDir` to a fresh location before retrying.
 
 ### JSON lines
 
@@ -158,6 +161,7 @@ The flag `--jsonl` can be used to extract data directly to stdout.
 Parquet files will not be written if using `--jsonl`.
 
 **Note**: logging information is sent to stderr.
+In `--parquet` mode, malformed JSON lines reaching the Python writer are treated as fatal errors rather than skipped.
 
 ## Extraction Modes
 
@@ -188,16 +192,22 @@ Extractors can be configured using the `--config` flag, which accepts a JSON obj
 lake run scout --config '{"filter": true}' --command types --parquet --imports Lean
 ```
 
+Built-in extractors validate config strictly. Unknown keys and values of the wrong type are treated as extraction errors and cause a nonzero exit code.
+
 ### Available Configuration Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `filter` | boolean | `false` | When `true`, filters out internal/auto-generated declarations (for `types`) or common tactic syntax nodes (for `tactics`) |
+| `filter` | boolean | `false` | When `true`, filters out internal/auto-generated declarations (for `types` / `const_dep`) or common tactic syntax nodes (for `tactics`) |
+| `taskLimit` | natural number | unset | Maximum number of concurrent per-constant worker tasks for imports-mode extractors (`types`, `const_dep`) |
 
 **Examples**:
 ```bash
 # Enable filtering to exclude internal declarations
 lake run scout --config '{"filter": true}' --command types --parquet --imports Lean
+
+# Bound imports-mode worker parallelism
+lake run scout --config '{"taskLimit": 8}' --command const_dep --parquet --imports Lean
 
 # Disable filtering to get all tactic nodes (default behavior)
 lake run scout --config '{"filter": false}' --command tactics --parquet --library MyLib
@@ -233,6 +243,7 @@ lake run scout --command types --parquet --imports Lean
 
 **Configuration**:
 - `filter` (default: `false`): When `true`, excludes internal declarations like recursors, `noConfusion`, matchers, and other auto-generated constants
+- `taskLimit` (optional natural number): Bounds concurrent per-constant worker tasks during imports-mode extraction
 
 ### `tactics`
 Extracts tactic invocations with goal states, used constants, elaborator info, and syntax kinds.
@@ -272,11 +283,7 @@ lake run scout --command const_dep --parquet --imports Lean
 
 **Configuration**:
 - `filter` (default: `false`): When `true`, excludes internal declarations (recursors, matchers, `noConfusion`, etc.) from both the extracted constants and their dependency lists
-
-### List all extractors
-```bash
-lake run scout --command extractors
-```
+- `taskLimit` (optional natural number): Bounds concurrent per-constant worker tasks during imports-mode extraction
 
 ## Creating datasets
 

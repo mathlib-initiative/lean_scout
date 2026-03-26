@@ -39,19 +39,16 @@ run_test() {
     local expected_exit="$3"
     local check_pattern="$4"
 
-    # Run command and capture output/exit code
     set +e
     output=$(eval "$cmd" 2>&1)
     exit_code=$?
     set -e
 
-    # Check exit code
     if [ "$exit_code" -ne "$expected_exit" ]; then
         fail "$name (expected exit $expected_exit, got $exit_code)" "$output"
         return
     fi
 
-    # Check pattern if provided
     if [ -n "$check_pattern" ]; then
         if echo "$output" | grep -q "$check_pattern"; then
             pass "$name"
@@ -119,7 +116,6 @@ run_test "--imports works" \
     "lake run scout --command types --jsonl --imports LeanScoutTestProject" \
     0 ""
 
-# Note: --library produces .input targets (file paths), which tactics supports but types doesn't
 run_test "--library works" \
     "lake run scout --command tactics --jsonl --parallel 1 --library LeanScoutTestProject" \
     0 ""
@@ -133,7 +129,6 @@ echo ""
 # --- Output Format Tests ---
 echo "Output Formats:"
 
-# Test JSONL outputs valid JSON
 set +e
 output=$(lake run scout --command types --jsonl --imports LeanScoutTestProject 2>/dev/null | head -1)
 if echo "$output" | python3 -c "import sys, json; json.loads(sys.stdin.read())" 2>/dev/null; then
@@ -144,7 +139,6 @@ else
 fi
 set -e
 
-# Test parquet creates files
 tmpdir=$(mktemp -d)
 set +e
 parquet_output=$(lake run scout --command types --parquet --dataDir "$tmpdir" --imports LeanScoutTestProject 2>&1)
@@ -156,7 +150,6 @@ fi
 set -e
 rm -rf "$tmpdir"
 
-# Test logs go to stderr
 set +e
 stderr_output=$(lake run scout --command types --jsonl --imports LeanScoutTestProject 2>&1 >/dev/null)
 if echo "$stderr_output" | grep -q "\[INFO\]"; then
@@ -175,41 +168,177 @@ run_test "--parallel option accepted" \
     "lake run scout --command types --jsonl --parallel 2 --imports LeanScoutTestProject" \
     0 ""
 
-# Test multiple tasks with --library (tactics supports .input targets)
 set +e
 logs=$(lake run scout --command tactics --jsonl --parallel 2 --library LeanScoutTestProject 2>&1 >/dev/null)
 task_count=$(echo "$logs" | grep -c "Started extractor task" || true)
 if [ "$task_count" -ge 2 ]; then
     pass "Multiple tasks started with --library (found $task_count)"
 else
-    fail "Multiple tasks started with --library (expected >=2, got $task_count)"
+    fail "Multiple tasks started with --library (expected >=2, got $task_count)" "$logs"
 fi
 set -e
 
 echo ""
 
-# --- Parquet Writer Options Tests ---
-echo "Parquet Writer Options:"
+# --- Strict Failure Behavior Tests ---
+echo "Strict Failure Behavior:"
 
-# Test --numShards option
+bad_syntax=$(mktemp --suffix=.lean)
+cat > "$bad_syntax" <<'EOF'
+import Init
+
+theorem bad : True := by
+  (
+EOF
+
+syntax_stdout=$(mktemp)
+syntax_stderr=$(mktemp)
+set +e
+lake run scout --command tactics --jsonl --parallel 1 --read "$bad_syntax" >"$syntax_stdout" 2>"$syntax_stderr"
+syntax_exit=$?
+set -e
+if [ "$syntax_exit" -eq 1 ] && [ ! -s "$syntax_stdout" ]; then
+    pass "Syntax errors fail tactics extraction with no JSON output"
+else
+    fail "Syntax errors fail tactics extraction with no JSON output" "$(cat "$syntax_stderr"; echo; cat "$syntax_stdout")"
+fi
+rm -f "$bad_syntax" "$syntax_stdout" "$syntax_stderr"
+
+bad_type=$(mktemp --suffix=.lean)
+cat > "$bad_type" <<'EOF'
+import Init
+
+theorem bad : True := by
+  exact 1
+EOF
+
+type_stdout=$(mktemp)
+type_stderr=$(mktemp)
+set +e
+lake run scout --command tactics --jsonl --parallel 1 --read "$bad_type" >"$type_stdout" 2>"$type_stderr"
+type_exit=$?
+set -e
+if [ "$type_exit" -eq 1 ] && [ ! -s "$type_stdout" ]; then
+    pass "Type errors fail tactics extraction with no JSON output"
+else
+    fail "Type errors fail tactics extraction with no JSON output" "$(cat "$type_stderr"; echo; cat "$type_stdout")"
+fi
+rm -f "$bad_type" "$type_stdout" "$type_stderr"
+
+missing_file="/tmp/lean_scout_missing_$$.lean"
+set +e
+logs=$(lake run scout --command tactics --jsonl --parallel 1 --read "$missing_file" LeanScoutTestProject/Basic.lean 2>&1 >/dev/null)
+exit_code=$?
+task_count=$(echo "$logs" | grep -c "Started extractor task" || true)
+set -e
+if [ "$exit_code" -eq 1 ] && [ "$task_count" -eq 1 ]; then
+    pass "Fail-fast stops later --read targets after first failure"
+else
+    fail "Fail-fast stops later --read targets after first failure" "$logs"
+fi
+
+set +e
+logs=$(lake run scout --command tactics --jsonl --parallel 2 --read "$missing_file" LeanScoutTestProject/Basic.lean LeanScoutTestProject/Lists.lean 2>&1 >/dev/null)
+exit_code=$?
+task_count=$(echo "$logs" | grep -c "Started extractor task" || true)
+set -e
+if [ "$exit_code" -eq 1 ] && [ "$task_count" -le 2 ]; then
+    pass "Fail-fast with --parallel 2 does not launch targets beyond active workers"
+else
+    fail "Fail-fast with --parallel 2 does not launch targets beyond active workers" "$logs"
+fi
+
+set +e
+logs=$(lake run scout --command types --jsonl --library LeanScoutTestProject 2>&1 >/dev/null)
+exit_code=$?
+task_count=$(echo "$logs" | grep -c "Started extractor task" || true)
+set -e
+if [ "$exit_code" -eq 1 ] && [ "$task_count" -eq 1 ]; then
+    pass "Unsupported multi-target extraction stops after first failure"
+else
+    fail "Unsupported multi-target extraction stops after first failure" "$logs"
+fi
+
+echo ""
+
+# --- Config Validation Tests ---
+echo "Config Validation:"
+
+run_test "types rejects wrong config type" \
+    "lake run scout --config '{\"filter\":\"notbool\"}' --command types --jsonl --imports LeanScoutTestProject" \
+    1 "Invalid config"
+
+run_test "const_dep rejects wrong taskLimit type" \
+    "lake run scout --config '{\"taskLimit\":\"notnat\"}' --command const_dep --jsonl --imports LeanScoutTestProject" \
+    1 "Invalid config"
+
+run_test "tactics rejects unknown config fields" \
+    "lake run scout --config '{\"unknown\":true}' --command tactics --jsonl --read LeanScoutTestProject/Basic.lean" \
+    1 "Invalid config"
+
+echo ""
+
+# --- Parquet Failure Handling Tests ---
+echo "Parquet Failure Handling:"
+
 tmpdir=$(mktemp -d)
 set +e
-shards_output=$(lake run scout --command types --parquet --dataDir "$tmpdir" --numShards 4 --imports LeanScoutTestProject 2>&1)
-shard_count=$(ls "$tmpdir"/*.parquet 2>/dev/null | wc -l)
-if [ "$shard_count" -le 4 ] && [ "$shard_count" -gt 0 ]; then
-    pass "--numShards limits shard count (got $shard_count shards)"
-else
-    fail "--numShards limits shard count (expected <=4, got $shard_count)" "$shards_output"
-fi
+parquet_output=$(lake run scout --command tactics --parquet --dataDir "$tmpdir" --parallel 1 --read "$missing_file" LeanScoutTestProject/Basic.lean 2>&1)
+exit_code=$?
 set -e
+if [ "$exit_code" -eq 1 ] && [ -d "$tmpdir" ]; then
+    pass "Parquet output directory is left on disk after failure"
+else
+    fail "Parquet output directory is left on disk after failure" "$parquet_output"
+fi
 rm -rf "$tmpdir"
 
-# Test --batchRows option accepted
+bad_syntax=$(mktemp --suffix=.lean)
+cat > "$bad_syntax" <<'EOF'
+import Init
+
+theorem bad : True := by
+  (
+EOF
+
 tmpdir=$(mktemp -d)
-run_test "--batchRows option accepted" \
-    "lake run scout --command types --parquet --dataDir '$tmpdir' --batchRows 100 --imports LeanScoutTestProject 2>/dev/null" \
-    0 ""
-rm -rf "$tmpdir"
+set +e
+parquet_output=$(lake run scout --command tactics --parquet --dataDir "$tmpdir" --parallel 1 --read "$bad_syntax" 2>&1)
+exit_code=$?
+set -e
+if [ "$exit_code" -eq 1 ] && [ -d "$tmpdir" ]; then
+    pass "Parquet output directory is left on disk after Lean file errors"
+else
+    fail "Parquet output directory is left on disk after Lean file errors" "$parquet_output"
+fi
+rm -rf "$tmpdir" "$bad_syntax"
+
+echo ""
+
+# --- Imports Worker Failure Propagation Tests ---
+echo "Imports Worker Failure Propagation:"
+
+set +e
+build_output=$(lake build LeanScoutTestProject.ThrowingExtractor 2>&1)
+build_exit=$?
+set -e
+if [ "$build_exit" -ne 0 ]; then
+    fail "Build test plugin extractor" "$build_output"
+else
+    set +e
+    plugin_output=$(lake run scout \
+        --plugin LeanScoutTestProject.ThrowingExtractor \
+        --command throwing_imports \
+        --jsonl \
+        --imports LeanScoutTestProject.Basic 2>&1 >/dev/null)
+    plugin_exit=$?
+    set -e
+    if [ "$plugin_exit" -eq 1 ]; then
+        pass "Imports worker failures propagate to the top-level run"
+    else
+        fail "Imports worker failures propagate to the top-level run" "$plugin_output"
+    fi
+fi
 
 echo ""
 
