@@ -9,7 +9,7 @@ namespace LeanScout
 open Lean Elab Frontend
 
 def InputTarget.inputCtx (tgt : InputTarget) : IO Parser.InputContext :=
-  return Parser.mkInputContext (← IO.FS.readFile tgt.path) "<target>"
+  return Parser.mkInputContext (← IO.FS.readFile tgt.path) tgt.path.toString
 
 def Target.toString : Target → String
   | .imports ⟨i⟩ => s!"imports {i}"

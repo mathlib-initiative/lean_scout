@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import threading
+from contextlib import suppress
 from typing import Any
 
 import pyarrow as pa  # type: ignore[import-untyped]
@@ -33,6 +34,8 @@ class ShardedParquetWriter:
         self.paths: dict[int, str] = {}  # shard -> file path
 
         self._lock = threading.Lock()
+        self._closed = False
+        self._close_stats: dict[str, int | str] | None = None
 
         os.makedirs(self.out_dir, exist_ok=True)
 
@@ -42,8 +45,18 @@ class ShardedParquetWriter:
         h = hashlib.blake2b(s.encode("utf-8"), digest_size=8).digest()
         return int.from_bytes(h, "big") % self.num_shards
 
+    def _current_stats(self) -> dict[str, int | str]:
+        """Return current writer statistics."""
+        return {
+            "total_rows": sum(self.counts.values()) if self.counts else 0,
+            "num_shards": len(self.writers),
+            "out_dir": self.out_dir,
+        }
+
     def add_record(self, record: dict[str, Any]) -> None:
         """Add a record to the appropriate shard buffer, flushing if needed."""
+        if self._closed:
+            raise RuntimeError("cannot add records after writer has been closed")
 
         shard_key_value = record.get(self.shard_key)
         shard = self._compute_shard(shard_key_value)
@@ -87,20 +100,37 @@ class ShardedParquetWriter:
             for shard in list(self.buffers.keys()):
                 self._flush_shard_unsafe(shard)
 
+    def _close_open_writers_unsafe(self) -> None:
+        """Best-effort close of all open shard writers.
+
+        Must be called while holding self._lock.
+        """
+        for writer in self.writers.values():
+            with suppress(Exception):
+                writer.close()
+
     def close(self) -> dict[str, int | str]:
         """Close all writers and return statistics.
 
-        Should only be called once, after all records have been added.
+        The method is idempotent. If a previous close attempt failed, later calls return the
+        best-known statistics instead of raising a secondary cleanup error.
         """
         with self._lock:
-            for shard in list(self.buffers.keys()):
-                self._flush_shard_unsafe(shard)
+            if self._closed:
+                return self._close_stats or self._current_stats()
 
-            for writer in self.writers.values():
-                writer.close()
+            writers_closed_cleanly = False
+            try:
+                for shard in list(self.buffers.keys()):
+                    self._flush_shard_unsafe(shard)
 
-            return {
-                "total_rows": sum(self.counts.values()) if self.counts else 0,
-                "num_shards": len(self.writers),
-                "out_dir": self.out_dir,
-            }
+                for writer in self.writers.values():
+                    writer.close()
+                writers_closed_cleanly = True
+
+                self._close_stats = self._current_stats()
+                return self._close_stats
+            finally:
+                self._closed = True
+                if not writers_closed_cleanly:
+                    self._close_open_writers_unsafe()

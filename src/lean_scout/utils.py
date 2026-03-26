@@ -10,9 +10,24 @@ import pyarrow as pa  # type: ignore[import-untyped]
 logger = logging.getLogger(__name__)
 
 
-def stream_json_lines(input_stream: Iterable[str] | TextIO) -> Iterator[dict[str, Any]]:
-    """Stream and parse JSON lines from input, logging malformed lines as warnings.
+class MalformedJsonLineError(ValueError):
+    """Raised when a JSONL stream contains malformed JSON in strict mode."""
 
+
+def _line_preview(line: str, *, max_chars: int = 100) -> str:
+    """Return a truncated preview of a line for diagnostics."""
+    return line[:max_chars] + "..." if len(line) > max_chars else line
+
+
+def stream_json_lines(
+    input_stream: Iterable[str] | TextIO,
+    *,
+    strict: bool = True,
+) -> Iterator[dict[str, Any]]:
+    """Stream and parse JSON lines from input.
+
+    In strict mode, malformed JSON raises :class:`MalformedJsonLineError`.
+    In non-strict mode, malformed lines are logged and skipped.
     Terminates on EOF (stdin closed).
     """
     for line_num, line in enumerate(input_stream, start=1):
@@ -22,11 +37,11 @@ def stream_json_lines(input_stream: Iterable[str] | TextIO) -> Iterator[dict[str
         try:
             yield json.loads(line)
         except json.JSONDecodeError as e:
-            # Log malformed JSON with truncated content for debugging
-            line_preview = line[:100] + "..." if len(line) > 100 else line
-            logger.warning(
-                "Skipping malformed JSON at line %d: %s (error: %s)", line_num, line_preview, str(e)
-            )
+            line_preview = _line_preview(line)
+            message = f"Malformed JSON at line {line_num}: {line_preview} (error: {e})"
+            if strict:
+                raise MalformedJsonLineError(message) from e
+            logger.warning(message)
 
 
 def datatype_from_json(type_obj: dict[str, Any]) -> pa.DataType:

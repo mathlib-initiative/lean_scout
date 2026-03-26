@@ -47,7 +47,6 @@ class TestParquetWriterCliUnit:
             ):
                 main()
 
-            # Verify parquet files were created
             parquet_files = list(Path(tmpdir).glob("*.parquet"))
             assert len(parquet_files) > 0
 
@@ -118,7 +117,6 @@ class TestParquetWriterCliUnit:
                 "--key", "name",
             ]
 
-            # Create a mock stdin that raises an exception
             mock_stdin = mock.MagicMock()
             mock_stdin.__iter__ = mock.MagicMock(side_effect=RuntimeError("test error"))
 
@@ -147,7 +145,6 @@ class TestParquetWriterCliUnit:
                 "--key", "name",
             ]
 
-            # Create a mock stdin that raises KeyboardInterrupt
             mock_stdin = mock.MagicMock()
             mock_stdin.__iter__ = mock.MagicMock(side_effect=KeyboardInterrupt())
 
@@ -159,6 +156,33 @@ class TestParquetWriterCliUnit:
                 main()
 
             assert exc_info.value.code == 130
+
+    def test_main_malformed_json_exits(self):
+        """Test that malformed JSON is fatal."""
+        schema = {
+            "fields": [
+                {"name": "name", "type": {"datatype": "string"}},
+            ]
+        }
+
+        input_data = '{"name": "ok"}\nnot valid json\n'
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_args = [
+                "parquet_writer",
+                "--dataDir", tmpdir,
+                "--schema", json.dumps(schema),
+                "--key", "name",
+            ]
+
+            with (
+                mock.patch.object(sys, "argv", test_args),
+                mock.patch.object(sys, "stdin", io.StringIO(input_data)),
+                pytest.raises(SystemExit) as exc_info,
+            ):
+                main()
+
+            assert exc_info.value.code == 1
 
 
 class TestParquetWriterCliSubprocess:
@@ -197,11 +221,9 @@ class TestParquetWriterCliSubprocess:
 
             assert result.returncode == 0
 
-            # Verify parquet files were created
             parquet_files = list(Path(tmpdir).glob("*.parquet"))
             assert len(parquet_files) > 0
 
-            # Read back and verify data
             total_rows = sum(pq.read_table(pf).num_rows for pf in parquet_files)
             assert total_rows == 3
 
@@ -215,3 +237,50 @@ class TestParquetWriterCliSubprocess:
 
         assert result.returncode != 0
         assert "required" in result.stderr.lower()
+
+    def test_malformed_json_is_fatal(self):
+        """Test that malformed JSON causes a nonzero exit."""
+        schema = {
+            "fields": [
+                {"name": "name", "nullable": False, "type": {"datatype": "string"}},
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = subprocess.run(
+                [
+                    "uv", "run", "parquet_writer",
+                    "--dataDir", tmpdir,
+                    "--schema", json.dumps(schema),
+                    "--key", "name",
+                ],
+                input='{"name": "ok"}\nnot valid json\n',
+                capture_output=True,
+                text=True,
+            )
+
+            assert result.returncode == 1
+
+    def test_processing_failure_does_not_report_secondary_close_error(self):
+        """Test that cleanup does not mask the primary writer failure."""
+        schema = {
+            "fields": [
+                {"name": "name", "nullable": False, "type": {"datatype": "string"}},
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = subprocess.run(
+                [
+                    "uv", "run", "parquet_writer",
+                    "--dataDir", tmpdir,
+                    "--schema", json.dumps(schema),
+                    "--key", "name",
+                ],
+                input='{}\n',
+                capture_output=True,
+                text=True,
+            )
+
+            assert result.returncode == 1
+            assert "Operation on closed file" not in result.stderr

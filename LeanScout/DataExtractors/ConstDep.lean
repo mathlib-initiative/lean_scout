@@ -18,17 +18,16 @@ public unsafe def constDep : DataExtractor where
   key := "name"
   go config sink opts
   | .imports tgt => do
-    let filter? := match config.getObjValAs? Bool "filter" with
-      | .ok b => b
-      | .error _ => false
-    let taskLimit? := config.getObjValAs? Nat "taskLimit" |>.toOption
-    tgt.runParallelCoreM opts (maxTasks := taskLimit?) fun env n c => Meta.MetaM.run' do
-      if filter? && (← declNameFilter n) then return
+    let cfg ← match parseFilterTaskLimitConfig "const_dep" config with
+      | .ok cfg => pure cfg
+      | .error err => throw <| IO.userError err
+    tgt.runParallelCoreM opts (maxTasks := cfg.taskLimit) fun env n c => Meta.MetaM.run' do
+      if cfg.filter && (← declNameFilter n) then return
       let mod : Option Name := match env.getModuleIdxFor? n with
         | some idx => env.header.moduleNames[idx]!
         | none => if env.constants.map₂.contains n then env.header.mainModule else none
       let deps : Array String ← c.getUsedConstantsAsSet.toArray |>.filterMapM fun nm => do
-        if filter? && (← declNameFilter nm) then return none else return nm.toString
+        if cfg.filter && (← declNameFilter nm) then return none else return nm.toString
       sink <| json% {
         name : $(n),
         module : $(mod),

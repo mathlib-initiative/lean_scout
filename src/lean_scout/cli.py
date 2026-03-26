@@ -2,9 +2,18 @@
 
 import argparse
 import sys
+from contextlib import suppress
 
 from .parquet_writer import ShardedParquetWriter
 from .utils import deserialize_schema, stream_json_lines
+
+
+def _best_effort_close(writer: ShardedParquetWriter | None) -> None:
+    """Attempt to close the writer without masking a primary failure."""
+    if writer is None:
+        return
+    with suppress(Exception):
+        writer.close()
 
 
 def main() -> None:
@@ -43,13 +52,11 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Deserialize to PyArrow schema
     try:
         pa_schema = deserialize_schema(args.schema)
     except Exception:
         sys.exit(1)
 
-    # Create writer
     writer = ShardedParquetWriter(
         schema=pa_schema,
         out_dir=args.dataDir,
@@ -58,18 +65,20 @@ def main() -> None:
         shard_key=args.key,
     )
 
+    completed = False
     try:
         for record in stream_json_lines(sys.stdin):
             writer.add_record(record)
 
         writer.close()
-
+        completed = True
     except KeyboardInterrupt:
-        writer.close()
+        if not completed:
+            _best_effort_close(writer)
         sys.exit(130)
-
     except Exception:
-        writer.close()
+        if not completed:
+            _best_effort_close(writer)
         sys.exit(1)
 
 
