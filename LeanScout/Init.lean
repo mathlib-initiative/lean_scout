@@ -21,7 +21,7 @@ initialize dataExtractorsExt : PersistentEnvExtension (Command × Name) (Command
       for bs in as do for (x,y) in bs do out := out.insert x y
       return out
     addEntryFn S := fun (x,y) => S.insert x y
-    exportEntriesFnEx _ s _ := s.toArray
+    exportEntriesFn := fun s => s.toArray
   }
 
 syntax (name := dataExtractorAttr) "data_extractor" ident : attr
