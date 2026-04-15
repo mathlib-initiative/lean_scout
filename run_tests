@@ -4,7 +4,7 @@ set -e  # Exit on error
 
 echo ""
 echo "╔════════════════════════════════════════════════╗"
-echo "║      Lean Scout Test Suite (Six Phases)        ║"
+echo "║     Lean Scout Test Suite (Seven Phases)       ║"
 echo "╚════════════════════════════════════════════════╝"
 
 # Sync test_project toolchain with repo root
@@ -35,6 +35,11 @@ echo ""
 echo "=== Phase 4: Lean Orchestrator Integration Tests ==="
 echo "Testing CLI argument handling and orchestration"
 ./test/integration/test_lean_orchestrator.sh
+
+echo ""
+echo "=== Phase 4b: Input Frontend Regression Test ==="
+echo "Testing --read frontend behavior against a local minimal repro"
+./test/integration/test_input_frontend_regression.sh
 
 echo ""
 echo "=== Phase 5: End-to-End Extractor Tests ==="
