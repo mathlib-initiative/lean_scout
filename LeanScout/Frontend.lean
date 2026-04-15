@@ -25,9 +25,14 @@ private unsafe def throwIfMessagesHaveErrors
 
 namespace InputTarget
 
+private def applyCmdlineFrontendDefaults (opts : Options) : Options :=
+  let opts := Lean.internal.cmdlineSnapshots.setIfNotSet opts true
+  Elab.async.setIfNotSet opts true
+
 unsafe def processCommands (tgt : InputTarget) (opts : Options) (go : State → IO α) : IO α := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
+  let opts := applyCmdlineFrontendDefaults opts
   let inputCtx ← tgt.inputCtx
   let (header, parserState, messages) ← Parser.parseHeader inputCtx
   throwIfMessagesHaveErrors tgt.path "parsing" messages
