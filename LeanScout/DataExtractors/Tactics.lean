@@ -9,9 +9,29 @@ open Lean
 namespace LeanScout
 namespace DataExtractors
 
+private def positionType : DataType :=
+  .struct [
+    { name := "line", nullable := false, type := .nat },
+    { name := "column", nullable := false, type := .nat }
+  ]
+
+private def getModuleName? (ctxInfo : Lean.Elab.ContextInfo) : Option String :=
+  let moduleName := ctxInfo.env.header.mainModule
+  if moduleName == .anonymous then none else some s!"{moduleName}"
+
+private def getSyntaxRange (ctxInfo : Lean.Elab.ContextInfo) (stx : Syntax) : IO (Lean.Position × Lean.Position) := do
+  let some startPos := stx.getPos?
+    | throw <| IO.userError s!"Original tactic syntax missing start position for '{stx.getKind}'"
+  let some endPos := stx.getTailPos?
+    | throw <| IO.userError s!"Original tactic syntax missing end position for '{stx.getKind}'"
+  return (ctxInfo.fileMap.toPosition startPos, ctxInfo.fileMap.toPosition endPos)
+
 @[data_extractor tactics]
 public unsafe def tactics : DataExtractor where
   schema := .mk [
+    { name := "module", type := .string },
+    { name := "startPos", nullable := false, type := positionType },
+    { name := "endPos", nullable := false, type := positionType },
     { name := "goals", nullable := false, type := .list <| .struct [
       { name := "pp", nullable := false, type := .string },
       { name := "usedConstants", nullable := false, type := .list .string }
@@ -32,6 +52,8 @@ public unsafe def tactics : DataExtractor where
         let kind := info.stx.getKind
         let ppTac : String := toString info.stx.prettyPrint
         let elaborator := info.elaborator
+        let moduleName? := getModuleName? ctxInfo
+        let (startPos, endPos) ← getSyntaxRange ctxInfo info.stx
         -- `goalsBefore` must be pretty-printed using `mctxBefore`, but the corresponding
         -- metavariables may only be instantiable using assignments from `mctxAfter`.
         let ctxBefore : Lean.Elab.ContextInfo := { ctxInfo with mctx := info.mctxBefore }
@@ -50,6 +72,9 @@ public unsafe def tactics : DataExtractor where
             usedConstants : $(consts.toList.map fun nm => s!"{nm}")
           }
         sink <| json% {
+          module : $(moduleName?),
+          startPos : $(startPos),
+          endPos : $(endPos),
           goals : $(goals),
           ppTac : $(ppTac),
           elaborator : $(elaborator),

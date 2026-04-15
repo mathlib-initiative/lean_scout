@@ -48,6 +48,19 @@ def assert_tactic_contains(dataset: Dataset, substring: str, min_count: int = 1)
     )
 
 
+def assert_position_dict(pos: dict[str, Any]):
+    assert isinstance(pos, dict), f"Expected position dict, got {type(pos)}"
+    assert "line" in pos and "column" in pos, f"Position missing keys: {pos}"
+    assert isinstance(pos["line"], int), f"Position line should be int, got {pos}"
+    assert isinstance(pos["column"], int), f"Position column should be int, got {pos}"
+    assert pos["line"] >= 1, f"Position line should be >= 1, got {pos}"
+    assert pos["column"] >= 0, f"Position column should be >= 0, got {pos}"
+
+
+def position_tuple(pos: dict[str, Any]) -> tuple[int, int]:
+    return (pos["line"], pos["column"])
+
+
 @pytest.fixture(scope="module")
 def tactics_dataset():
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -120,11 +133,17 @@ def test_tactics_dataset_record_schema(tactics_dataset):
 
     first_record = tactics_dataset[0]
 
+    assert 'module' in first_record
+    assert 'startPos' in first_record
+    assert 'endPos' in first_record
     assert 'ppTac' in first_record
     assert 'goals' in first_record
     assert 'elaborator' in first_record
     assert 'kind' in first_record
 
+    assert first_record['module'] is None or isinstance(first_record['module'], str)
+    assert_position_dict(first_record['startPos'])
+    assert_position_dict(first_record['endPos'])
     assert isinstance(first_record['ppTac'], str)
     assert isinstance(first_record['goals'], list)
     assert isinstance(first_record['elaborator'], str)
@@ -202,6 +221,49 @@ def test_tactics_elaborator_field(tactics_dataset):
         assert len(record['elaborator']) > 0, f"Elaborator should not be empty for tactic {record['ppTac']}"
 
 
+def test_tactics_location_fields(tactics_dataset):
+    for record in tactics_dataset:
+        assert record['module'] is not None, f"Library extraction should populate module for tactic {record['ppTac']}"
+        assert isinstance(record['module'], str), f"Module should be string for tactic {record['ppTac']}"
+        assert len(record['module']) > 0, f"Module should not be empty for tactic {record['ppTac']}"
+
+        assert_position_dict(record['startPos'])
+        assert_position_dict(record['endPos'])
+        assert position_tuple(record['startPos']) <= position_tuple(record['endPos']), (
+            f"Expected startPos <= endPos for tactic {record['ppTac']}, got {record['startPos']} -> {record['endPos']}"
+        )
+
+
+def test_tactics_known_source_spans(tactics_dataset):
+    zero_add_rw = get_records_by_tactic(tactics_dataset, 'rw [Nat.zero_add]')
+    assert len(zero_add_rw) > 0, "Expected at least one rw [Nat.zero_add] tactic"
+    zero_add_spans = {
+        (
+            record['module'],
+            (record['startPos']['line'], record['startPos']['column']),
+            (record['endPos']['line'], record['endPos']['column']),
+        )
+        for record in zero_add_rw
+    }
+    assert zero_add_spans == {
+        ('LeanScoutTestProject.Basic', (7, 2), (7, 19))
+    }
+
+    succ_rw = get_records_by_tactic(tactics_dataset, 'rw [Nat.succ_add, Nat.add_succ, ih]')
+    assert len(succ_rw) > 0, "Expected at least one rw [Nat.succ_add, Nat.add_succ, ih] tactic"
+    succ_spans = {
+        (
+            record['module'],
+            (record['startPos']['line'], record['startPos']['column']),
+            (record['endPos']['line'], record['endPos']['column']),
+        )
+        for record in succ_rw
+    }
+    assert succ_spans == {
+        ('LeanScoutTestProject.Basic', (17, 4), (17, 39))
+    }
+
+
 def test_tactics_rfl_from_test_project(tactics_dataset):
     rfl_records = get_records_by_tactic(tactics_dataset, "rfl")
 
@@ -246,9 +308,15 @@ def test_tactics_jsonl_output_format(tactics_jsonl_records):
     assert len(tactics_jsonl_records) > 0, "Should have extracted some tactic records"
 
     for record in tactics_jsonl_records:
+        assert "module" in record, "Tactic record should have 'module' field"
+        assert "startPos" in record, "Tactic record should have 'startPos' field"
+        assert "endPos" in record, "Tactic record should have 'endPos' field"
         assert "ppTac" in record, "Tactic record should have 'ppTac' field"
         assert "goals" in record, "Tactic record should have 'goals' field"
         assert "kind" in record, "Tactic record should have 'kind' field"
+        assert record["module"] is None or isinstance(record["module"], str)
+        assert_position_dict(record["startPos"])
+        assert_position_dict(record["endPos"])
 
 
 def test_tactics_jsonl_has_expected_tactics(tactics_jsonl_records):

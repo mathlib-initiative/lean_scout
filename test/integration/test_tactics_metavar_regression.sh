@@ -81,7 +81,7 @@ records = [json.loads(line) for line in Path(sys.argv[1]).read_text().splitlines
 if not records:
     raise SystemExit("no tactic records parsed")
 
-found_have = any(r.get("ppTac") == "have : n < x ∨ n < y" for r in records)
+have_record = next((r for r in records if r.get("ppTac") == "have : n < x ∨ n < y"), None)
 grind_seq_record = next(
     (
         r for r in records
@@ -91,10 +91,22 @@ grind_seq_record = next(
     None,
 )
 
-if not found_have:
+if have_record is None:
     raise SystemExit("missing expected grind have record")
 if grind_seq_record is None:
     raise SystemExit("missing expected grindSeq record")
+
+for key in ["module", "startPos", "endPos"]:
+    if key not in have_record:
+        raise SystemExit(f"missing expected location field {key!r} on have record")
+
+if have_record["module"] is not None and not isinstance(have_record["module"], str):
+    raise SystemExit("expected module field to be null or a string")
+
+if have_record["startPos"] != {"line": 20, "column": 4}:
+    raise SystemExit(f"unexpected have startPos: {have_record['startPos']}")
+if have_record["endPos"] != {"line": 20, "column": 24}:
+    raise SystemExit(f"unexpected have endPos: {have_record['endPos']}")
 
 first_goal = grind_seq_record["goals"][0]
 if not first_goal["usedConstants"]:
