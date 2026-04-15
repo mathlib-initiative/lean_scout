@@ -33,19 +33,23 @@ public unsafe def tactics : DataExtractor where
         let kind := info.stx.getKind
         let ppTac : String := toString info.stx.prettyPrint
         let elaborator := info.elaborator
-        -- `goalsBefore` belongs to `info.mctxBefore`; using the current context's
-        -- metavar state can crash on structural nodes such as nested `grind` sequences.
+        -- `goalsBefore` must be pretty-printed using `mctxBefore`, but the corresponding
+        -- metavariables may only be instantiable using assignments from `mctxAfter`.
         let ctxBefore : Lean.Elab.ContextInfo := { ctxInfo with mctx := info.mctxBefore }
-        let goals : List Json ← ctxBefore.runMetaM' {} do
-          info.goalsBefore.mapM fun mvarId =>
-            mvarId.withContext do
-              let goal ← Lean.Meta.ppGoal mvarId
+        let ctxAfter : Lean.Elab.ContextInfo := { ctxInfo with mctx := info.mctxAfter }
+        let goals : List Json ← info.goalsBefore.mapM fun mvarId => do
+          let mvarDecl := info.mctxBefore.getDecl mvarId
+          let goal ← ctxBefore.runMetaM' {} do
+            Lean.Meta.withLCtx mvarDecl.lctx mvarDecl.localInstances do
+              Lean.Meta.ppGoal mvarId
+          let consts ← ctxAfter.runMetaM' {} do
+            Lean.Meta.withLCtx mvarDecl.lctx mvarDecl.localInstances do
               let t ← Lean.instantiateMVars <| .mvar mvarId
-              let consts := t.getUsedConstantsAsSet
-              return json% {
-                pp : $(toString goal),
-                usedConstants : $(consts.toList.map fun nm => s!"{nm}")
-              }
+              return t.getUsedConstantsAsSet
+          return json% {
+            pp : $(toString goal),
+            usedConstants : $(consts.toList.map fun nm => s!"{nm}")
+          }
         sink <| json% {
           goals : $(goals),
           ppTac : $(ppTac),

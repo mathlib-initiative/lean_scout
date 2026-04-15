@@ -82,16 +82,25 @@ if not records:
     raise SystemExit("no tactic records parsed")
 
 found_have = any(r.get("ppTac") == "have : n < x ∨ n < y" for r in records)
-found_grind_seq = any(
-    r.get("kind") == "Lean.Parser.Tactic.Grind.grindSeq"
-    and "have : n < x ∨ n < y" in r.get("ppTac", "")
-    for r in records
+grind_seq_record = next(
+    (
+        r for r in records
+        if r.get("kind") == "Lean.Parser.Tactic.Grind.grindSeq"
+        and "have : n < x ∨ n < y" in r.get("ppTac", "")
+    ),
+    None,
 )
 
 if not found_have:
     raise SystemExit("missing expected grind have record")
-if not found_grind_seq:
+if grind_seq_record is None:
     raise SystemExit("missing expected grindSeq record")
+
+first_goal = grind_seq_record["goals"][0]
+if not first_goal["usedConstants"]:
+    raise SystemExit("expected non-empty usedConstants for grindSeq goal")
+if "False" not in first_goal["usedConstants"]:
+    raise SystemExit("expected `False` in grindSeq goal usedConstants")
 PY
 pass "Lean Scout extracts the grind regression fixture and preserves grindSeq goals"
 
