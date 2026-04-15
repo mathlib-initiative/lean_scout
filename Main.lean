@@ -147,20 +147,29 @@ where
     | [], s => s.toConfig
     | unknown :: _, _ => throw s!"Unknown argument: '{unknown}'"
 
+private structure LibraryModuleData where
+  name : Name
+  path : System.FilePath
+  setupFile : System.FilePath
+deriving FromJson
+
 def TargetSpec.toTargets : TargetSpec → ExceptT String IO (Array Target)
   | .imports names => return #[.mkImports names]
   | .read paths => return paths.toArray.map fun p => .read p
   | .library name => do
     let output ← IO.Process.output {
       cmd := "lake"
-      args := #["query", "-q", s!"{name}:module_paths"]
+      args := #["query", "--json", s!"{name}:moduleData"]
     }
     if output.exitCode != 0 then
       throw s!"lake query failed for library '{name}': {output.stderr.trimAscii}"
-    let lines := output.stdout.splitOn "\n" |>.filter (·.trimAscii.toString ≠ "")
-    if lines.isEmpty then
+    let .ok json := Lean.Json.parse output.stdout
+      | throw s!"Failed to parse lake query JSON for library '{name}'"
+    let .ok modules := Lean.fromJson? (α := Array LibraryModuleData) json
+      | throw s!"Failed to decode lake query result for library '{name}'"
+    if modules.isEmpty then
       throw s!"No modules found for library '{name}'"
-    return lines.toArray.map fun s => .read <| System.FilePath.mk s
+    return modules.map fun m => .read m.path (some m.setupFile)
 
 structure Writer where
   finish : IO UInt32

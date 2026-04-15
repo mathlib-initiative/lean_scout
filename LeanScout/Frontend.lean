@@ -43,8 +43,51 @@ unsafe def processCommands (tgt : InputTarget) (opts : Options) (go : State → 
   throwIfMessagesHaveErrors tgt.path "processing" s.commandState.messages
   go s
 
+private unsafe def collectCommandInfoTrees
+    (snap : Language.Lean.CommandParsedSnapshot) (acc : Array InfoTree := #[]) : Array InfoTree :=
+  let acc := match snap.elabSnap.infoTreeSnap.get.infoTree? with
+    | some tree => acc.push tree
+    | none => acc
+  match snap.nextCmdSnap? with
+  | some next => collectCommandInfoTrees next.get acc
+  | none => acc
+
+private unsafe def withInfoTreesUsingSetup
+    (tgt : InputTarget) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) := do
+  initSearchPath (← findSysroot)
+  enableInitializersExecution
+  let some setupFile := tgt.setupFile?
+    | throw <| IO.userError s!"Missing module setup for '{tgt.path}'"
+  let setup ← Lean.ModuleSetup.load setupFile
+  let inputCtx ← tgt.inputCtx
+  let opts := applyCmdlineFrontendDefaults opts
+  let setupFn stx := do
+    liftM <| setup.dynlibs.forM Lean.loadDynlib
+    return .ok {
+      trustLevel := 0
+      package? := setup.package?
+      mainModuleName := setup.name
+      isModule := setup.isModule || stx.isModule
+      imports := setup.imports?.getD stx.imports
+      plugins := setup.plugins
+      importArts := setup.importArts
+      opts := opts.mergeBy (fun _ _ hOpt => hOpt) setup.options.toOptions
+    }
+  let snap ← Language.Lean.process setupFn none { inputCtx with }
+  let snaps := Language.toSnapshotTree snap
+  let messages := snaps.getAll.map (·.diagnostics.msgLog) |>.foldl (· ++ ·) {}
+  throwIfMessagesHaveErrors tgt.path "processing" messages
+  let some parsed := snap.result?
+    | throw <| IO.userError s!"Lean failed to initialize processing for '{tgt.path}'"
+  let some processed := parsed.processedSnap.get.result?
+    | throw <| IO.userError s!"Lean failed to process header for '{tgt.path}'"
+  collectCommandInfoTrees processed.firstCmdSnap.get |>.toPArray' |>.mapM go
+
 unsafe def withInfoTrees (tgt : InputTarget) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) :=
-  tgt.processCommands opts fun s => s.commandState.infoState.trees.mapM go
+  if tgt.setupFile?.isSome then
+    withInfoTreesUsingSetup tgt opts go
+  else
+    tgt.processCommands opts fun s => s.commandState.infoState.trees.mapM go
 
 unsafe def withVisitM
     (tgt : InputTarget) (opts : Options)

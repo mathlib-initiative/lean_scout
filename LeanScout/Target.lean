@@ -13,10 +13,10 @@ def InputTarget.inputCtx (tgt : InputTarget) : IO Parser.InputContext :=
 
 def Target.toString : Target → String
   | .imports ⟨i⟩ => s!"imports {i}"
-  | .input ⟨i⟩ => s!"input {i}"
+  | .input tgt => s!"input {tgt.path}"
 
-def Target.read (path : System.FilePath) : Target :=
-  .input <| ⟨path⟩
+def Target.read (path : System.FilePath) (setupFile? : Option System.FilePath := none) : Target :=
+  .input <| ⟨path, setupFile?⟩
 
 def Target.mkImports (imports : Array String) : Target :=
   .imports ⟨imports.map fun s => {

@@ -40,6 +40,7 @@ deriving ToJson, FromJson
 
 structure InputTarget where
   path : System.FilePath
+  setupFile? : Option System.FilePath := none
 deriving ToJson, FromJson
 
 inductive Target where
