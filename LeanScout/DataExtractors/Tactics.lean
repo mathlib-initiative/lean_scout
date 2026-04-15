@@ -21,8 +21,7 @@ public unsafe def tactics : DataExtractor where
     { name := "kind", nullable := false, type := .string },
   ]
   key := "ppTac"
-  go config sink opts
-  | .input tgt => do
+  go config sink opts tgt := do
     match parseEmptyConfig "tactics" config with
     | .ok () => pure ()
     | .error err => throw <| IO.userError err
@@ -56,7 +55,6 @@ public unsafe def tactics : DataExtractor where
           elaborator : $(elaborator),
           kind : $(kind)
         }
-  | _ => throw <| IO.userError "Unsupported Target"
 
 end DataExtractors
 end LeanScout

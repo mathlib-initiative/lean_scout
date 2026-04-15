@@ -120,6 +120,26 @@ run_test "--library works" \
     "lake run scout --command tactics --jsonl --parallel 1 --library LeanScoutTestProject" \
     0 ""
 
+set +e
+logs=$(lake run scout --command tactics --jsonl --parallel 1 --read LeanScoutTestProject/Basic.lean 2>&1 >/dev/null)
+exit_code=$?
+set -e
+if [ "$exit_code" -eq 0 ] && echo "$logs" | grep -q '"target":{"input":{' && echo "$logs" | grep -q '"path":"'; then
+    pass "--read uses input targets"
+else
+    fail "--read uses input targets" "$logs"
+fi
+
+set +e
+logs=$(lake run scout --command tactics --jsonl --parallel 1 --library LeanScoutTestProject 2>&1 >/dev/null)
+exit_code=$?
+set -e
+if [ "$exit_code" -eq 0 ] && echo "$logs" | grep -q '"target":{"setup":{' && echo "$logs" | grep -q '"setupFile":"'; then
+    pass "--library uses setup targets"
+else
+    fail "--library uses setup targets" "$logs"
+fi
+
 run_test "--library with invalid name shows error" \
     "lake run scout --command tactics --jsonl --library NonexistentLibrary" \
     1 "lake query failed"

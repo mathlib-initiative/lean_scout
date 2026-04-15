@@ -23,11 +23,20 @@ private unsafe def throwIfMessagesHaveErrors
     let details := if rendered.isEmpty then "(Lean reported errors, but no messages were rendered)" else rendered
     throw <| IO.userError s!"Lean reported errors while {stage} '{path}':\n{details}"
 
-namespace InputTarget
-
 private def applyCmdlineFrontendDefaults (opts : Options) : Options :=
   let opts := Lean.internal.cmdlineSnapshots.setIfNotSet opts true
   Elab.async.setIfNotSet opts true
+
+private unsafe def collectCommandInfoTrees
+    (snap : Language.Lean.CommandParsedSnapshot) (acc : Array InfoTree := #[]) : Array InfoTree :=
+  let acc := match snap.elabSnap.infoTreeSnap.get.infoTree? with
+    | some tree => acc.push tree
+    | none => acc
+  match snap.nextCmdSnap? with
+  | some next => collectCommandInfoTrees next.get acc
+  | none => acc
+
+namespace InputTarget
 
 unsafe def processCommands (tgt : InputTarget) (opts : Options) (go : State → IO α) : IO α := do
   initSearchPath (← findSysroot)
@@ -43,22 +52,24 @@ unsafe def processCommands (tgt : InputTarget) (opts : Options) (go : State → 
   throwIfMessagesHaveErrors tgt.path "processing" s.commandState.messages
   go s
 
-private unsafe def collectCommandInfoTrees
-    (snap : Language.Lean.CommandParsedSnapshot) (acc : Array InfoTree := #[]) : Array InfoTree :=
-  let acc := match snap.elabSnap.infoTreeSnap.get.infoTree? with
-    | some tree => acc.push tree
-    | none => acc
-  match snap.nextCmdSnap? with
-  | some next => collectCommandInfoTrees next.get acc
-  | none => acc
+unsafe def withInfoTrees (tgt : InputTarget) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) :=
+  tgt.processCommands opts fun s => s.commandState.infoState.trees.mapM go
 
-private unsafe def withInfoTreesUsingSetup
-    (tgt : InputTarget) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) := do
+unsafe def withVisitM
+    (tgt : InputTarget) (opts : Options)
+    (preNode : ContextInfo → Info → PersistentArray InfoTree → IO Bool)
+    (postNode : ContextInfo → Info → PersistentArray InfoTree → List (Option α) → IO α)
+    (ctx? : Option ContextInfo) : IO (PersistentArray (Option α)) := do
+  tgt.withInfoTrees opts fun tree => tree.visitM preNode postNode ctx?
+
+end InputTarget
+
+namespace SetupTarget
+
+unsafe def withInfoTrees (tgt : SetupTarget) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
-  let some setupFile := tgt.setupFile?
-    | throw <| IO.userError s!"Missing module setup for '{tgt.path}'"
-  let setup ← Lean.ModuleSetup.load setupFile
+  let setup ← Lean.ModuleSetup.load tgt.setupFile
   let inputCtx ← tgt.inputCtx
   let opts := applyCmdlineFrontendDefaults opts
   let setupFn stx := do
@@ -83,20 +94,27 @@ private unsafe def withInfoTreesUsingSetup
     | throw <| IO.userError s!"Lean failed to process header for '{tgt.path}'"
   collectCommandInfoTrees processed.firstCmdSnap.get |>.toPArray' |>.mapM go
 
-unsafe def withInfoTrees (tgt : InputTarget) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) :=
-  if tgt.setupFile?.isSome then
-    withInfoTreesUsingSetup tgt opts go
-  else
-    tgt.processCommands opts fun s => s.commandState.infoState.trees.mapM go
-
 unsafe def withVisitM
-    (tgt : InputTarget) (opts : Options)
+    (tgt : SetupTarget) (opts : Options)
     (preNode : ContextInfo → Info → PersistentArray InfoTree → IO Bool)
     (postNode : ContextInfo → Info → PersistentArray InfoTree → List (Option α) → IO α)
     (ctx? : Option ContextInfo) : IO (PersistentArray (Option α)) := do
   tgt.withInfoTrees opts fun tree => tree.visitM preNode postNode ctx?
 
-end InputTarget
+end SetupTarget
+
+unsafe def Target.withInfoTrees (tgt : Target) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) :=
+  match tgt with
+  | .input tgt => tgt.withInfoTrees opts go
+  | .setup tgt => tgt.withInfoTrees opts go
+  | _ => throw <| IO.userError "Unsupported Target"
+
+unsafe def Target.withVisitM
+    (tgt : Target) (opts : Options)
+    (preNode : ContextInfo → Info → PersistentArray InfoTree → IO Bool)
+    (postNode : ContextInfo → Info → PersistentArray InfoTree → List (Option α) → IO α)
+    (ctx? : Option ContextInfo) : IO (PersistentArray (Option α)) := do
+  tgt.withInfoTrees opts fun tree => tree.visitM preNode postNode ctx?
 
 namespace ImportsTarget
 

@@ -52,7 +52,7 @@ USAGE:
 TARGETS:
   --imports <module...>   Extract from imported modules (single subprocess).
   --read <paths...>       Extract from specific files (one subprocess per path).
-  --library <name>        Extract from all modules in a library (via lake query).
+  --library <name>        Extract from all modules in a library (via lake query + setup).
 
 OPTIONS:
   --command <command>     Data extractor command name (e.g. types, tactics, const_dep).
@@ -169,7 +169,7 @@ def TargetSpec.toTargets : TargetSpec → ExceptT String IO (Array Target)
       | throw s!"Failed to decode lake query result for library '{name}'"
     if modules.isEmpty then
       throw s!"No modules found for library '{name}'"
-    return modules.map fun m => .read m.path (some m.setupFile)
+    return modules.map fun m => .mkSetup m.path m.setupFile
 
 structure Writer where
   finish : IO UInt32
