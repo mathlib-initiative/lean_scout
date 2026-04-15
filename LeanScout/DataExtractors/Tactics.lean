@@ -27,21 +27,25 @@ public unsafe def tactics : DataExtractor where
     | .ok () => pure ()
     | .error err => throw <| IO.userError err
     discard <| tgt.withVisitM opts (α := Unit) (ctx? := none)
-      (fun _ _ _ => return true) fun ctxInfo info _ _ => ctxInfo.runMetaM' {} do
+      (fun _ _ _ => return true) fun ctxInfo info _ _ => do
         let .ofTacticInfo info := info | return
         let some (.original ..) := info.stx.getHeadInfo? | return
         let kind := info.stx.getKind
         let ppTac : String := toString info.stx.prettyPrint
         let elaborator := info.elaborator
-        let goals : List Json ← info.goalsBefore.mapM fun mvarId =>
-          mvarId.withContext do
-            let goal ← Lean.Meta.ppGoal mvarId
-            let t ← Lean.instantiateMVars <| .mvar mvarId
-            let consts := t.getUsedConstantsAsSet
-            return json% {
-              pp : $(toString goal),
-              usedConstants : $(consts.toList.map fun nm => s!"{nm}")
-            }
+        -- `goalsBefore` belongs to `info.mctxBefore`; using the current context's
+        -- metavar state can crash on structural nodes such as nested `grind` sequences.
+        let ctxBefore : Lean.Elab.ContextInfo := { ctxInfo with mctx := info.mctxBefore }
+        let goals : List Json ← ctxBefore.runMetaM' {} do
+          info.goalsBefore.mapM fun mvarId =>
+            mvarId.withContext do
+              let goal ← Lean.Meta.ppGoal mvarId
+              let t ← Lean.instantiateMVars <| .mvar mvarId
+              let consts := t.getUsedConstantsAsSet
+              return json% {
+                pp : $(toString goal),
+                usedConstants : $(consts.toList.map fun nm => s!"{nm}")
+              }
         sink <| json% {
           goals : $(goals),
           ppTac : $(ppTac),
