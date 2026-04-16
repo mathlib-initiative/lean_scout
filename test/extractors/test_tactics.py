@@ -314,9 +314,41 @@ def test_tactics_jsonl_output_format(tactics_jsonl_records):
         assert "ppTac" in record, "Tactic record should have 'ppTac' field"
         assert "goals" in record, "Tactic record should have 'goals' field"
         assert "kind" in record, "Tactic record should have 'kind' field"
-        assert record["module"] is None or isinstance(record["module"], str)
+        assert isinstance(record["module"], str), "Library extraction should populate module"
+        assert len(record["module"]) > 0, "Module should not be empty"
         assert_position_dict(record["startPos"])
         assert_position_dict(record["endPos"])
+        assert position_tuple(record["startPos"]) <= position_tuple(record["endPos"]), (
+            f"Expected startPos <= endPos for tactic {record['ppTac']}, got {record['startPos']} -> {record['endPos']}"
+        )
+
+
+def test_tactics_jsonl_known_source_spans(tactics_jsonl_records):
+    zero_add_spans = {
+        (
+            record["module"],
+            (record["startPos"]["line"], record["startPos"]["column"]),
+            (record["endPos"]["line"], record["endPos"]["column"]),
+        )
+        for record in tactics_jsonl_records
+        if record["ppTac"] == "rw [Nat.zero_add]"
+    }
+    assert zero_add_spans == {
+        ("LeanScoutTestProject.Basic", (7, 2), (7, 19))
+    }
+
+    succ_spans = {
+        (
+            record["module"],
+            (record["startPos"]["line"], record["startPos"]["column"]),
+            (record["endPos"]["line"], record["endPos"]["column"]),
+        )
+        for record in tactics_jsonl_records
+        if record["ppTac"] == "rw [Nat.succ_add, Nat.add_succ, ih]"
+    }
+    assert succ_spans == {
+        ("LeanScoutTestProject.Basic", (17, 4), (17, 39))
+    }
 
 
 def test_tactics_jsonl_has_expected_tactics(tactics_jsonl_records):

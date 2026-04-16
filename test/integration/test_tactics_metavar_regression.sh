@@ -100,8 +100,12 @@ for key in ["module", "startPos", "endPos"]:
     if key not in have_record:
         raise SystemExit(f"missing expected location field {key!r} on have record")
 
-if have_record["module"] is not None and not isinstance(have_record["module"], str):
-    raise SystemExit("expected module field to be null or a string")
+if have_record["module"] is not None:
+    raise SystemExit(f"expected plain --read extraction to emit null module, got {have_record['module']!r}")
+if grind_seq_record.get("module") is not None:
+    raise SystemExit(
+        f"expected plain --read grindSeq record to emit null module, got {grind_seq_record.get('module')!r}"
+    )
 
 if have_record["startPos"] != {"line": 20, "column": 4}:
     raise SystemExit(f"unexpected have startPos: {have_record['startPos']}")
