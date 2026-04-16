@@ -5,7 +5,7 @@ Lean Scout is a tool for creating datasets from Lean projects.
 ## Requirements
 
 To use this tool, you must have:
-- A basic Lean4 installation, including `elan`, `lake`, and `lean`. The supported toolchain is tracked in `lean-toolchain` (currently `leanprover/lean4:v4.30.0-rc1`).
+- A basic Lean4 installation, including `elan`, `lake`, and `lean`. The supported toolchain is tracked in `lean-toolchain`.
 - Python 3.13+.
 - The `uv` Python package manager.
 
