@@ -23,11 +23,20 @@ private unsafe def throwIfMessagesHaveErrors
     let details := if rendered.isEmpty then "(Lean reported errors, but no messages were rendered)" else rendered
     throw <| IO.userError s!"Lean reported errors while {stage} '{path}':\n{details}"
 
-namespace InputTarget
-
 private def applyCmdlineFrontendDefaults (opts : Options) : Options :=
   let opts := Lean.internal.cmdlineSnapshots.setIfNotSet opts true
   Elab.async.setIfNotSet opts true
+
+private unsafe def collectCommandInfoTrees
+    (snap : Language.Lean.CommandParsedSnapshot) (acc : Array InfoTree := #[]) : Array InfoTree :=
+  let acc := match snap.elabSnap.infoTreeSnap.get.infoTree? with
+    | some tree => acc.push tree
+    | none => acc
+  match snap.nextCmdSnap? with
+  | some next => collectCommandInfoTrees next.get acc
+  | none => acc
+
+namespace InputTarget
 
 unsafe def processCommands (tgt : InputTarget) (opts : Options) (go : State → IO α) : IO α := do
   initSearchPath (← findSysroot)
@@ -54,6 +63,58 @@ unsafe def withVisitM
   tgt.withInfoTrees opts fun tree => tree.visitM preNode postNode ctx?
 
 end InputTarget
+
+namespace SetupTarget
+
+unsafe def withInfoTrees (tgt : SetupTarget) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) := do
+  initSearchPath (← findSysroot)
+  enableInitializersExecution
+  let setup ← Lean.ModuleSetup.load tgt.setupFile
+  let inputCtx ← tgt.inputCtx
+  let opts := applyCmdlineFrontendDefaults opts
+  let setupFn stx := do
+    liftM <| setup.dynlibs.forM Lean.loadDynlib
+    return .ok {
+      trustLevel := 0
+      package? := setup.package?
+      mainModuleName := setup.name
+      isModule := setup.isModule || stx.isModule
+      imports := setup.imports?.getD stx.imports
+      plugins := setup.plugins
+      importArts := setup.importArts
+      opts := opts.mergeBy (fun _ _ hOpt => hOpt) setup.options.toOptions
+    }
+  let snap ← Language.Lean.process setupFn none { inputCtx with }
+  let snaps := Language.toSnapshotTree snap
+  let messages := snaps.getAll.map (·.diagnostics.msgLog) |>.foldl (· ++ ·) {}
+  throwIfMessagesHaveErrors tgt.path "processing" messages
+  let some parsed := snap.result?
+    | throw <| IO.userError s!"Lean failed to initialize processing for '{tgt.path}'"
+  let some processed := parsed.processedSnap.get.result?
+    | throw <| IO.userError s!"Lean failed to process header for '{tgt.path}'"
+  collectCommandInfoTrees processed.firstCmdSnap.get |>.toPArray' |>.mapM go
+
+unsafe def withVisitM
+    (tgt : SetupTarget) (opts : Options)
+    (preNode : ContextInfo → Info → PersistentArray InfoTree → IO Bool)
+    (postNode : ContextInfo → Info → PersistentArray InfoTree → List (Option α) → IO α)
+    (ctx? : Option ContextInfo) : IO (PersistentArray (Option α)) := do
+  tgt.withInfoTrees opts fun tree => tree.visitM preNode postNode ctx?
+
+end SetupTarget
+
+unsafe def Target.withInfoTrees (tgt : Target) (opts : Options) (go : InfoTree → IO α) : IO (PersistentArray α) :=
+  match tgt with
+  | .input tgt => tgt.withInfoTrees opts go
+  | .setup tgt => tgt.withInfoTrees opts go
+  | _ => throw <| IO.userError "Unsupported Target"
+
+unsafe def Target.withVisitM
+    (tgt : Target) (opts : Options)
+    (preNode : ContextInfo → Info → PersistentArray InfoTree → IO Bool)
+    (postNode : ContextInfo → Info → PersistentArray InfoTree → List (Option α) → IO α)
+    (ctx? : Option ContextInfo) : IO (PersistentArray (Option α)) := do
+  tgt.withInfoTrees opts fun tree => tree.visitM preNode postNode ctx?
 
 namespace ImportsTarget
 
