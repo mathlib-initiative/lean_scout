@@ -5,7 +5,7 @@ Lean Scout is a tool for creating datasets from Lean projects.
 ## Requirements
 
 To use this tool, you must have:
-- A basic Lean4 installation, including `elan`, `lake`, and `lean`. The supported toolchain is tracked in `lean-toolchain` (currently `leanprover/lean4:v4.29.0-rc7`).
+- A basic Lean4 installation, including `elan`, `lake`, and `lean`. The supported toolchain is tracked in `lean-toolchain`.
 - Python 3.13+.
 - The `uv` Python package manager.
 
@@ -259,7 +259,7 @@ filtered = dataset.filter(lambda x: x["allowCompletion"])
 ```
 
 ### `tactics`
-Extracts tactic invocations with goal states, used constants, elaborator info, and syntax kinds.
+Extracts tactic invocations with goal states, used constants, elaborator info, syntax kinds, and source locations.
 
 **Supported modes**: `--read`, `--library`
 
@@ -269,12 +269,19 @@ lake run scout --command tactics --parquet --parallel 4 --library LeanScoutTest
 ```
 
 **Output schema**:
+- `module` (string, nullable): Module containing the tactic (`null` for plain `--read` files without module setup)
+- `startPos` (struct): Start position of the tactic syntax in the source file
+  - `line` (nat): 1-based line number
+  - `column` (nat): 0-based column number
+- `endPos` (struct): End position of the tactic syntax in the source file
+  - `line` (nat): 1-based line number
+  - `column` (nat): 0-based column number
 - `goals` (list): List of goal states before the tactic
   - `pp` (string): Pretty-printed goal
   - `usedConstants` (list of strings): Constants referenced in the goal
 - `ppTac` (string): Pretty-printed tactic syntax
 - `elaborator` (string): Name of the elaborator that produced this tactic
-- `kind` (string): Non-null syntax node kind for the tactic
+- `kind` (string): Syntax node kind for the tactic
 
 **Configuration**:
 - no built-in extractor-specific options; config must be `{}`

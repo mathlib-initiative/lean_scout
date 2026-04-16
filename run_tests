@@ -42,6 +42,11 @@ echo "Testing --read frontend behavior against a local minimal repro"
 ./test/integration/test_input_frontend_regression.sh
 
 echo ""
+echo "=== Phase 4c: Tactics Metavariable Regression Test ==="
+echo "Testing tactics extraction against a local grind/metavariable repro"
+./test/integration/test_tactics_metavar_regression.sh
+
+echo ""
 echo "=== Phase 5: End-to-End Extractor Tests ==="
 echo "Testing data extraction pipeline using test_project"
 uv run pytest test/extractors/ -v
