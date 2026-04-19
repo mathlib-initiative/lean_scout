@@ -8,7 +8,7 @@
 - Generated parquet outputs and temporary shards should stay out of version control; configure outputs with `--dataDir` when running commands and use `--cmdRoot` to anchor relative inputs/outputs to the invocation directory when running from automation or outside the project root.
 
 ## Build, Test, and Development Commands
-Run everything from the repo root (requires `elan`/`lake`, the Lean toolchain tracked in `lean-toolchain` currently `v4.29.0-rc7`, and `uv`):
+Run everything from the repo root (requires `elan`/`lake`, the Lean toolchain tracked in `lean-toolchain` currently `v4.29.1`, and `uv`):
 ```bash
 lake build                                       # Build Lean libraries and the lean_scout exe
 lake test                                        # Lean schema roundtrip/unit checks
@@ -44,7 +44,7 @@ Lean Scout creates datasets from Lean4 projects by extracting structured data (t
 **Architecture:** Lean orchestrator (`Main.lean`) drives Lean subprocesses that emit JSON; for Parquet output, a Python subprocess (`cli.py`) ingests the JSON and writes to sharded Parquet files; for JSONL output, the Lean orchestrator writes directly to stdout.
 
 ## Requirements
-- Lean4 via `elan`/`lake`/`lean` (tracked in `lean-toolchain`: `v4.29.0-rc7`)
+- Lean4 via `elan`/`lake`/`lean` (tracked in `lean-toolchain`: `v4.29.1`)
 - `uv` package manager
 - Python `>=3.13` (per `pyproject.toml`) with deps: `datasets`, `pyarrow`, `pydantic`, `tqdm`
 
