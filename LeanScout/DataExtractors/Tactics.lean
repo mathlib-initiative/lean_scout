@@ -50,7 +50,9 @@ public unsafe def tactics : DataExtractor where
     { name := "nextStartPos", nullable := false, type := positionType },
     { name := "goals", nullable := false, type := .list <| .struct [
       { name := "pp", nullable := false, type := .string },
-      { name := "usedConstants", nullable := false, type := .list .string }
+      { name := "assigned", nullable := false, type := .bool },
+      { name := "usedConstants", nullable := false, type := .list .string },
+      { name := "usedFVars", nullable := false, type := .list .string },
     ]},
     { name := "goalsAfter", nullable := false, type := .list .string },
     { name := "ppTac", nullable := false, type := .string },
@@ -73,20 +75,27 @@ public unsafe def tactics : DataExtractor where
         let { startPos, endPos, nextStartPos } ← getSyntaxRange ctxInfo info.stx
         -- `goalsBefore` must be pretty-printed using `mctxBefore`, but the corresponding
         -- metavariables may only be instantiable using assignments from `mctxAfter`.
-        let ctxBefore : Lean.Elab.ContextInfo := { ctxInfo with mctx := info.mctxBefore }
-        let ctxAfter : Lean.Elab.ContextInfo := { ctxInfo with mctx := info.mctxAfter }
+        let ctxBefore : Elab.ContextInfo := { ctxInfo with mctx := info.mctxBefore }
+        let ctxAfter : Elab.ContextInfo := { ctxInfo with mctx := info.mctxAfter }
         let goals : List Json ← info.goalsBefore.mapM fun mvarId => do
-          let mvarDecl := info.mctxBefore.getDecl mvarId
-          let goal ← ctxBefore.runMetaM' {} do
-            Lean.Meta.withLCtx mvarDecl.lctx mvarDecl.localInstances do
-              Lean.Meta.ppGoal mvarId
-          let consts ← ctxAfter.runMetaM' {} do
-            Lean.Meta.withLCtx mvarDecl.lctx mvarDecl.localInstances do
-              let t ← Lean.instantiateMVars <| .mvar mvarId
-              return t.getUsedConstantsAsSet
+          let goal ← ctxBefore.runMetaM' {} do Meta.ppGoal mvarId
+          let (assigned, consts, fvars) ← ctxAfter.runMetaM' {} do
+            mvarId.withContext do
+              -- sufficient; user-facing goals will not be delayed-assigned
+              let assigned ← mvarId.isAssigned
+              let t ← instantiateMVars <| .mvar mvarId
+              let (_, { fvarIds .. }) ← t.collectFVars.run {}
+              -- Sanitize the names so their string representations are the same as in `ppGoal`.
+              let fvars ← if fvarIds.isEmpty then pure #[] else
+                let sanitizedLCtx := (← getLCtx).sanitizeNames.run' { options := (← getOptions) }
+                withLCtx' sanitizedLCtx do fvarIds.mapM fun fvarId =>
+                  return toString (← fvarId.getUserName)
+              return (assigned, t.getUsedConstantsAsSet, fvars)
           return json% {
             pp : $(toString goal),
-            usedConstants : $(consts.toList.map fun nm => s!"{nm}")
+            assigned : $assigned,
+            usedConstants : $(consts.toList.map fun nm => s!"{nm}"),
+            usedFVars : $fvars
           }
         let goalsAfter : List String ← ctxAfter.runMetaM' {} do
           info.goalsAfter.mapM fun mvarId => return toString (← Meta.ppGoal mvarId)
