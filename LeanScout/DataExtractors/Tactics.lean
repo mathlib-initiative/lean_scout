@@ -22,8 +22,7 @@ private structure PositionRangeWithNext where
   startPos : Position
   endPos : Position
   /-- Computed by looking at where the trailing whitespace ends. Does not imply that there is a
-  next tactic; this is merely the start position of whatever syntax comes next (possibly the end of
-  the file). -/
+  next tactic; this is merely the start position of whatever syntax comes next (possibly a command, tactic combinator, or even the end of the file). -/
   nextStartPos : Position
 
 private def getSyntaxRange (ctxInfo : Lean.Elab.ContextInfo) (stx : Syntax) :
