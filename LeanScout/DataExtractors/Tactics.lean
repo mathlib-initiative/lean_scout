@@ -4,10 +4,9 @@ public import LeanScout.Frontend
 public import LeanScout.InfoTree
 public import LeanScout.Init
 
-open Lean
+open Lean Meta
 
-namespace LeanScout
-namespace DataExtractors
+namespace LeanScout.DataExtractors
 
 private def positionType : DataType :=
   .struct [
@@ -19,12 +18,28 @@ private def getModuleName? (ctxInfo : Lean.Elab.ContextInfo) : Option String :=
   let moduleName := ctxInfo.env.header.mainModule
   if moduleName == .anonymous then none else some s!"{moduleName}"
 
-private def getSyntaxRange (ctxInfo : Lean.Elab.ContextInfo) (stx : Syntax) : IO (Lean.Position × Lean.Position) := do
+private structure PositionRangeWithNext where
+  startPos : Position
+  endPos : Position
+  /-- Computed by looking at where the trailing whitespace ends. Does not imply that there is a
+  next tactic; this is merely the start position of whatever syntax comes next (possibly the end of
+  the file). -/
+  nextStartPos : Position
+
+private def getSyntaxRange (ctxInfo : Lean.Elab.ContextInfo) (stx : Syntax) :
+    IO PositionRangeWithNext := do
   let some startPos := stx.getPos?
     | throw <| IO.userError s!"Original tactic syntax missing start position for '{stx.getKind}'"
   let some endPos := stx.getTailPos?
     | throw <| IO.userError s!"Original tactic syntax missing end position for '{stx.getKind}'"
-  return (ctxInfo.fileMap.toPosition startPos, ctxInfo.fileMap.toPosition endPos)
+  let some nextStartPos := stx.getTrailingTailPos?
+    | throw <| IO.userError s!"Original tactic syntax missing end position after trailing \
+      whitespace for '{stx.getKind}'"
+  return {
+    startPos := ctxInfo.fileMap.toPosition startPos,
+    endPos := ctxInfo.fileMap.toPosition endPos,
+    nextStartPos := ctxInfo.fileMap.toPosition nextStartPos
+  }
 
 @[data_extractor tactics]
 public unsafe def tactics : DataExtractor where
@@ -32,6 +47,7 @@ public unsafe def tactics : DataExtractor where
     { name := "module", type := .string },
     { name := "startPos", nullable := false, type := positionType },
     { name := "endPos", nullable := false, type := positionType },
+    { name := "nextStartPos", nullable := false, type := positionType },
     { name := "goals", nullable := false, type := .list <| .struct [
       { name := "pp", nullable := false, type := .string },
       { name := "usedConstants", nullable := false, type := .list .string }
@@ -53,7 +69,7 @@ public unsafe def tactics : DataExtractor where
         let ppTac : String := toString info.stx.prettyPrint
         let elaborator := info.elaborator
         let moduleName? := getModuleName? ctxInfo
-        let (startPos, endPos) ← getSyntaxRange ctxInfo info.stx
+        let { startPos, endPos, nextStartPos } ← getSyntaxRange ctxInfo info.stx
         -- `goalsBefore` must be pretty-printed using `mctxBefore`, but the corresponding
         -- metavariables may only be instantiable using assignments from `mctxAfter`.
         let ctxBefore : Lean.Elab.ContextInfo := { ctxInfo with mctx := info.mctxBefore }
@@ -72,14 +88,14 @@ public unsafe def tactics : DataExtractor where
             usedConstants : $(consts.toList.map fun nm => s!"{nm}")
           }
         sink <| json% {
-          module : $(moduleName?),
-          startPos : $(startPos),
-          endPos : $(endPos),
-          goals : $(goals),
-          ppTac : $(ppTac),
-          elaborator : $(elaborator),
-          kind : $(kind)
+          module : $moduleName?,
+          startPos : $startPos,
+          endPos : $endPos,
+          nextStartPos : $nextStartPos,
+          goals : $goals,
+          ppTac : $ppTac,
+          elaborator : $elaborator,
+          kind : $kind
         }
 
-end DataExtractors
-end LeanScout
+end LeanScout.DataExtractors
