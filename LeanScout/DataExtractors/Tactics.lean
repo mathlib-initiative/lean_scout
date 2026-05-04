@@ -77,7 +77,7 @@ public unsafe def tactics : DataExtractor where
         let ctxBefore : Elab.ContextInfo := { ctxInfo with mctx := info.mctxBefore }
         let ctxAfter : Elab.ContextInfo := { ctxInfo with mctx := info.mctxAfter }
         let goals : List Json ← info.goalsBefore.mapM fun mvarId => do
-          let goal ← ctxBefore.runMetaM' {} do Meta.ppGoal mvarId
+          let pp ← ctxBefore.runMetaM' {} do Meta.ppGoal mvarId
           let mvarDeclBefore := info.mctxBefore.getDecl mvarId
           let (assigned, consts, fvars) ← ctxAfter.runMetaM' {} do
             -- Use earlier context in case there was in-place modification of the local context
@@ -93,7 +93,7 @@ public unsafe def tactics : DataExtractor where
                   return toString (← fvarId.getUserName)
               return (assigned, t.getUsedConstantsAsSet, fvars)
           return json% {
-            pp : $(toString goal),
+            pp : $(toString pp),
             assigned : $assigned,
             usedConstants : $(consts.toList.map fun nm => s!"{nm}"),
             usedFVars : $fvars
