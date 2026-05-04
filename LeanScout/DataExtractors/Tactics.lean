@@ -52,6 +52,7 @@ public unsafe def tactics : DataExtractor where
       { name := "pp", nullable := false, type := .string },
       { name := "usedConstants", nullable := false, type := .list .string }
     ]},
+    { name := "goalsAfter", nullable := false, type := .list .string },
     { name := "ppTac", nullable := false, type := .string },
     { name := "elaborator", nullable := false, type := .string },
     { name := "kind", nullable := false, type := .string },
@@ -87,12 +88,15 @@ public unsafe def tactics : DataExtractor where
             pp : $(toString goal),
             usedConstants : $(consts.toList.map fun nm => s!"{nm}")
           }
+        let goalsAfter : List String ← ctxAfter.runMetaM' {} do
+          info.goalsAfter.mapM fun mvarId => return toString (← Meta.ppGoal mvarId)
         sink <| json% {
           module : $moduleName?,
           startPos : $startPos,
           endPos : $endPos,
           nextStartPos : $nextStartPos,
           goals : $goals,
+          goalsAfter : $goalsAfter,
           ppTac : $ppTac,
           elaborator : $elaborator,
           kind : $kind
