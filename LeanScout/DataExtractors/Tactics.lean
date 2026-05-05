@@ -79,6 +79,7 @@ public unsafe def tactics : DataExtractor where
     { name := "nextStartPos", nullable := false, type := positionType },
     { name := "goals", nullable := false, type := .list <| .struct [
       { name := "pp", nullable := false, type := .string },
+      { name := "ppTerm", nullable := false, type := .string },
       { name := "assigned", nullable := false, type := .bool },
       { name := "usedConstants", nullable := false, type := .list .string },
       { name := "usedFVars", nullable := false, type := .list .string },
@@ -86,7 +87,8 @@ public unsafe def tactics : DataExtractor where
         { name := "new", nullable := false, type := .bool },
         { name := "index", nullable := true, type := .nat }, -- null ↔ does not appear in goal list
         { name := "kind", nullable := false, type := .string },
-        { name := "pp", nullable := false, type := .string }
+        { name := "pp", nullable := false, type := .string },
+        { name := "ppTerm", nullable := false, type := .string }
       ]}
     ]},
     { name := "goalsAfter", nullable := false, type := .list .string },
@@ -115,7 +117,7 @@ public unsafe def tactics : DataExtractor where
         let goals : List Json ← info.goalsBefore.mapM fun mvarId => do
           let pp ← ctxBefore.runMetaM' {} do Meta.ppGoal mvarId
           let mvarDeclBefore := info.mctxBefore.getDecl mvarId
-          let (assigned, consts, fvars, usedGoals) ← ctxAfter.runMetaM' {} do
+          let (assigned, consts, fvars, usedGoals, ppTerm) ← ctxAfter.runMetaM' {} do
             -- Use earlier context in case there was in-place modification of the local context
             withLCtx mvarDeclBefore.lctx mvarDeclBefore.localInstances do
               -- sufficient; user-facing goals will not be delayed-assigned
@@ -138,12 +140,14 @@ public unsafe def tactics : DataExtractor where
                     new : $new,
                     index : $index?,
                     kind : $(toString kind),
-                    pp : $(toString pp)
+                    pp : $(toString pp),
+                    ppTerm : $(toString <|← ppExpr (.mvar mvarId))
                   }
                 pure (usedGoals, consts)
-              return (assigned, consts, fvars, usedGoals)
+              return (assigned, consts, fvars, usedGoals, ← ppExpr (.mvar mvarId))
           return json% {
             pp : $(toString pp),
+            ppTerm : $(toString ppTerm),
             assigned : $assigned,
             usedConstants : $(consts.toList.map fun nm => s!"{nm}"),
             usedFVars : $fvars,
