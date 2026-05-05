@@ -127,18 +127,20 @@ public unsafe def tactics : DataExtractor where
                 let sanitizedLCtx := (← getLCtx).sanitizeNames.run' { options := (← getOptions) }
                 withLCtx' sanitizedLCtx do fvarIds.mapM fun fvarId =>
                   return toString (← fvarId.getUserName)
-              let (mvars, consts) ← getMVarsAndConstantsNoDelayed t
-              let usedGoals : Array Json ← mvars.mapM fun mvarId => do
-                let new := !info.mctxBefore.decls.contains mvarId
-                let index? := info.goalsAfter.idxOf? mvarId
-                let kind ← mvarId.getKind
-                let pp ← Meta.ppGoal mvarId
-                return json% {
-                  new : $new,
-                  index : $index?,
-                  kind : $(toString kind),
-                  pp : $(toString pp)
-                }
+              let (usedGoals, consts) ← if !assigned then pure (#[], {}) else
+                let (mvars, consts) ← getMVarsAndConstantsNoDelayed t
+                let usedGoals ← mvars.mapM fun mvarId => do
+                  let new := !info.mctxBefore.decls.contains mvarId
+                  let index? := info.goalsAfter.idxOf? mvarId
+                  let kind ← mvarId.getKind
+                  let pp ← Meta.ppGoal mvarId
+                  return json% {
+                    new : $new,
+                    index : $index?,
+                    kind : $(toString kind),
+                    pp : $(toString pp)
+                  }
+                pure (usedGoals, consts)
               return (assigned, consts, fvars, usedGoals)
           return json% {
             pp : $(toString pp),
