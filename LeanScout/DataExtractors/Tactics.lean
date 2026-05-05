@@ -14,6 +14,30 @@ private def positionType : DataType :=
     { name := "column", nullable := false, type := .nat }
   ]
 
+/--
+Like `Meta.collectMVars`, but also collects used constants after following delayed assignments.
+-/
+private partial def collectMVarsAndUsedConstants (e : Expr) (consts : NameSet) :
+    StateRefT CollectMVars.State MetaM NameSet := do
+  let e ← instantiateMVars e
+  let s ← get
+  let resultSavedSize := s.result.size
+  let mut consts := e.getUsedConstantsAsSet ∪ consts
+  let s := e.collectMVars s
+  set s
+  for mvarId in s.result[resultSavedSize...*] do
+    match (← getDelayedMVarAssignment? mvarId) with
+    | none   => pure ()
+    | some d => consts ← collectMVarsAndUsedConstants (.mvar d.mvarIdPending) consts
+  return consts
+
+/-- Gets the unassigned metavariables in `e` after following delayed assignments, as well as the
+constants encountered along the way. -/
+def getMVarsAndConstantsNoDelayed (e : Expr) : MetaM (Array MVarId × NameSet) := do
+  let (consts, { result .. }) ← collectMVarsAndUsedConstants e {} |>.run {}
+  let result ← result.filterM (notM ·.isDelayedAssigned)
+  return (result, consts)
+
 private def getModuleName? (ctxInfo : Lean.Elab.ContextInfo) : Option String :=
   let moduleName := ctxInfo.env.header.mainModule
   if moduleName == .anonymous then none else some s!"{moduleName}"
@@ -40,6 +64,12 @@ private def getSyntaxRange (ctxInfo : Lean.Elab.ContextInfo) (stx : Syntax) :
     nextStartPos := ctxInfo.fileMap.toPosition nextStartPos
   }
 
+local instance : ToString MetavarKind where
+  toString
+    | .natural => "natural"
+    | .synthetic => "synthetic"
+    | .syntheticOpaque => "syntheticOpaque"
+
 @[data_extractor tactics]
 public unsafe def tactics : DataExtractor where
   schema := .mk [
@@ -52,6 +82,12 @@ public unsafe def tactics : DataExtractor where
       { name := "assigned", nullable := false, type := .bool },
       { name := "usedConstants", nullable := false, type := .list .string },
       { name := "usedFVars", nullable := false, type := .list .string },
+      { name := "usedGoals", nullable := false, type := .list <| .struct [
+        { name := "new", nullable := false, type := .bool },
+        { name := "index", nullable := true, type := .nat }, -- null ↔ does not appear in goal list
+        { name := "kind", nullable := false, type := .string },
+        { name := "pp", nullable := false, type := .string }
+      ]}
     ]},
     { name := "goalsAfter", nullable := false, type := .list .string },
     { name := "ppTac", nullable := false, type := .string },
@@ -79,7 +115,7 @@ public unsafe def tactics : DataExtractor where
         let goals : List Json ← info.goalsBefore.mapM fun mvarId => do
           let pp ← ctxBefore.runMetaM' {} do Meta.ppGoal mvarId
           let mvarDeclBefore := info.mctxBefore.getDecl mvarId
-          let (assigned, consts, fvars) ← ctxAfter.runMetaM' {} do
+          let (assigned, consts, fvars, usedGoals) ← ctxAfter.runMetaM' {} do
             -- Use earlier context in case there was in-place modification of the local context
             withLCtx mvarDeclBefore.lctx mvarDeclBefore.localInstances do
               -- sufficient; user-facing goals will not be delayed-assigned
@@ -91,12 +127,25 @@ public unsafe def tactics : DataExtractor where
                 let sanitizedLCtx := (← getLCtx).sanitizeNames.run' { options := (← getOptions) }
                 withLCtx' sanitizedLCtx do fvarIds.mapM fun fvarId =>
                   return toString (← fvarId.getUserName)
-              return (assigned, t.getUsedConstantsAsSet, fvars)
+              let (mvars, consts) ← getMVarsAndConstantsNoDelayed t
+              let usedGoals : Array Json ← mvars.mapM fun mvarId => do
+                let new := !info.mctxBefore.decls.contains mvarId
+                let index? := info.goalsAfter.idxOf? mvarId
+                let kind ← mvarId.getKind
+                let pp ← Meta.ppGoal mvarId
+                return json% {
+                  new : $new,
+                  index : $index?,
+                  kind : $(toString kind),
+                  pp : $(toString pp)
+                }
+              return (assigned, consts, fvars, usedGoals)
           return json% {
             pp : $(toString pp),
             assigned : $assigned,
             usedConstants : $(consts.toList.map fun nm => s!"{nm}"),
-            usedFVars : $fvars
+            usedFVars : $fvars,
+            usedGoals : $usedGoals
           }
         let goalsAfter : List String ← ctxAfter.runMetaM' {} do
           info.goalsAfter.mapM fun mvarId => return toString (← Meta.ppGoal mvarId)
