@@ -32,7 +32,7 @@ private partial def collectMVarsAndUsedConstants (e : Expr) (consts : NameSet) :
   return consts
 
 /-- Gets the unassigned metavariables in `e` after following delayed assignments, as well as the
-constants encountered along the way. -/
+constants encountered along the way. Does not include the intermediate delayed-assigned mvars. -/
 def getMVarsAndConstantsNoDelayed (e : Expr) : MetaM (Array MVarId × NameSet) := do
   let (consts, { result .. }) ← collectMVarsAndUsedConstants e {} |>.run {}
   let result ← result.filterM (notM ·.isDelayedAssigned)
