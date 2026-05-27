@@ -15,3 +15,9 @@ theorem add_comm (a b : Nat) : a + b = b + a := by
     rw [Nat.zero_add, Nat.add_zero]
   | succ n ih =>
     rw [Nat.succ_add, Nat.add_succ, ih]
+
+theorem tactic_goals_after_fixture (p : Prop) : p → p ∧ p := by
+  intro hp
+  constructor
+  · exact hp
+  · exact hp
