@@ -281,7 +281,7 @@ lake run scout --command tactics --parquet --parallel 4 --library LeanScoutTest
   - `column` (nat): 0-based column number
 - `goals` (list): List of goal states before the tactic
   - `pp` (string): Pretty-printed goal
-  - `ppTerm` (string): Pretty-printed term representation of the instantiated goal metavariable
+  - `ppTerm` (string): Pretty-printed term representation of the original goal metavariable before elaborating the tactic
   - `assigned` (bool): Whether the original goal metavariable is assigned after elaborating the tactic
   - `usedConstants` (list of strings): Constants referenced in the instantiated goal, including through delayed-assigned metavariables
   - `usedFVars` (list of strings): Free variables referenced in the instantiated goal, using the same sanitized names as the pretty-printed goal

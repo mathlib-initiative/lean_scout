@@ -333,7 +333,7 @@ def test_tactics_goals_after_and_dependency_fields(tactics_dataset):
     ]
 
     constructor_goal = constructor["goals"][0]
-    assert constructor_goal["ppTerm"] == "⟨?left, ?right⟩"
+    assert constructor_goal["ppTerm"].startswith("?m.")
     assert constructor_goal["assigned"] is True
     assert "And.intro" in constructor_goal["usedConstants"]
     assert constructor_goal["usedFVars"] == ["p"]
@@ -365,7 +365,7 @@ def test_tactics_used_goals_refine_fixture(tactics_dataset):
     ]
 
     refine_goal = refine["goals"][0]
-    assert refine_goal["ppTerm"] == "Exists.intro ?n ?h"
+    assert refine_goal["ppTerm"].startswith("?m.")
     assert refine_goal["assigned"] is True
     assert "Exists.intro" in refine_goal["usedConstants"]
     assert refine_goal["usedFVars"] == ["P"]
