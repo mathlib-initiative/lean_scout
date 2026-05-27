@@ -259,7 +259,7 @@ filtered = dataset.filter(lambda x: x["allowCompletion"])
 ```
 
 ### `tactics`
-Extracts tactic invocations with before/after goal states, used constants, used free variables, elaborator info, syntax kinds, and source locations.
+Extracts tactic invocations with before/after goal states, used constants, used free variables, used goals, elaborator info, syntax kinds, and source locations.
 
 **Supported modes**: `--read`, `--library`
 
@@ -282,8 +282,13 @@ lake run scout --command tactics --parquet --parallel 4 --library LeanScoutTest
 - `goals` (list): List of goal states before the tactic
   - `pp` (string): Pretty-printed goal
   - `assigned` (bool): Whether the original goal metavariable is assigned after elaborating the tactic
-  - `usedConstants` (list of strings): Constants referenced in the instantiated goal
+  - `usedConstants` (list of strings): Constants referenced in the instantiated goal, including through delayed-assigned metavariables
   - `usedFVars` (list of strings): Free variables referenced in the instantiated goal, using the same sanitized names as the pretty-printed goal
+  - `usedGoals` (list): Goals/metavariables referenced in the instantiated goal after following delayed assignments
+    - `new` (bool): Whether the used goal was created by this tactic rather than present before elaborating it
+    - `index` (nat, nullable): Index of the used goal in `goalsAfter`, or `null` if it is not present there
+    - `kind` (string): Metavariable kind (`natural`, `synthetic`, or `syntheticOpaque`)
+    - `pp` (string): Pretty-printed used goal
 - `goalsAfter` (list of strings): Pretty-printed goal states after the tactic
 - `ppTac` (string): Pretty-printed tactic syntax
 - `elaborator` (string): Name of the elaborator that produced this tactic

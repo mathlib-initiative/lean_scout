@@ -61,6 +61,36 @@ def position_tuple(pos: dict[str, Any]) -> tuple[int, int]:
     return (pos["line"], pos["column"])
 
 
+def assert_used_goal_dict(used_goal: dict[str, Any], tactic: str):
+    assert 'new' in used_goal, f"Used goal missing 'new' for tactic {tactic}"
+    assert 'index' in used_goal, f"Used goal missing 'index' for tactic {tactic}"
+    assert 'kind' in used_goal, f"Used goal missing 'kind' for tactic {tactic}"
+    assert 'pp' in used_goal, f"Used goal missing 'pp' for tactic {tactic}"
+
+    assert isinstance(used_goal['new'], bool), f"Used goal 'new' should be bool for tactic {tactic}"
+    assert used_goal['index'] is None or isinstance(used_goal['index'], int), (
+        f"Used goal 'index' should be int or None for tactic {tactic}"
+    )
+    assert isinstance(used_goal['kind'], str), f"Used goal 'kind' should be string for tactic {tactic}"
+    assert isinstance(used_goal['pp'], str), f"Used goal 'pp' should be string for tactic {tactic}"
+
+
+def assert_goal_dict(goal: dict[str, Any], tactic: str):
+    assert 'pp' in goal, f"Goal missing 'pp' for tactic {tactic}"
+    assert 'assigned' in goal, f"Goal missing 'assigned' for tactic {tactic}"
+    assert 'usedConstants' in goal, f"Goal missing 'usedConstants' for tactic {tactic}"
+    assert 'usedFVars' in goal, f"Goal missing 'usedFVars' for tactic {tactic}"
+    assert 'usedGoals' in goal, f"Goal missing 'usedGoals' for tactic {tactic}"
+
+    assert isinstance(goal['pp'], str), f"Goal 'pp' should be string for tactic {tactic}"
+    assert isinstance(goal['assigned'], bool), f"Goal 'assigned' should be bool for tactic {tactic}"
+    assert isinstance(goal['usedConstants'], list), f"Goal 'usedConstants' should be list for tactic {tactic}"
+    assert isinstance(goal['usedFVars'], list), f"Goal 'usedFVars' should be list for tactic {tactic}"
+    assert isinstance(goal['usedGoals'], list), f"Goal 'usedGoals' should be list for tactic {tactic}"
+    for used_goal in goal['usedGoals']:
+        assert_used_goal_dict(used_goal, tactic)
+
+
 @pytest.fixture(scope="module")
 def tactics_dataset():
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -216,15 +246,7 @@ def test_tactics_goal_structure(tactics_dataset):
 
         if len(record['goals']) > 0:
             for goal in record['goals']:
-                assert 'pp' in goal, f"Goal missing 'pp' for tactic {record['ppTac']}"
-                assert 'assigned' in goal, f"Goal missing 'assigned' for tactic {record['ppTac']}"
-                assert 'usedConstants' in goal, f"Goal missing 'usedConstants' for tactic {record['ppTac']}"
-                assert 'usedFVars' in goal, f"Goal missing 'usedFVars' for tactic {record['ppTac']}"
-
-                assert isinstance(goal['pp'], str), f"Goal 'pp' should be string for tactic {record['ppTac']}"
-                assert isinstance(goal['assigned'], bool), f"Goal 'assigned' should be bool for tactic {record['ppTac']}"
-                assert isinstance(goal['usedConstants'], list), f"Goal 'usedConstants' should be list for tactic {record['ppTac']}"
-                assert isinstance(goal['usedFVars'], list), f"Goal 'usedFVars' should be list for tactic {record['ppTac']}"
+                assert_goal_dict(goal, record['ppTac'])
 
 
 def test_tactics_elaborator_field(tactics_dataset):
@@ -310,6 +332,49 @@ def test_tactics_goals_after_and_dependency_fields(tactics_dataset):
     assert constructor_goal["assigned"] is True
     assert "And.intro" in constructor_goal["usedConstants"]
     assert constructor_goal["usedFVars"] == ["p"]
+    assert constructor_goal["usedGoals"] == [
+        {
+            "index": 0,
+            "kind": "natural",
+            "new": True,
+            "pp": "case left\np : Prop\nhp : p\n⊢ p",
+        },
+        {
+            "index": 1,
+            "kind": "natural",
+            "new": True,
+            "pp": "case right\np : Prop\nhp : p\n⊢ p",
+        },
+    ]
+
+
+def test_tactics_used_goals_refine_fixture(tactics_dataset):
+    refine_records = get_records_by_tactic(tactics_dataset, "refine ⟨?n, ?h⟩")
+    assert len(refine_records) == 1, "Expected refine tactic from usedGoals fixture"
+    refine = refine_records[0]
+    assert refine["goalsAfter"] == [
+        "case n\nP : Nat → Prop\nh : P 0\n⊢ Nat",
+        "case h\nP : Nat → Prop\nh : P 0\n⊢ P ?n",
+    ]
+
+    refine_goal = refine["goals"][0]
+    assert refine_goal["assigned"] is True
+    assert "Exists.intro" in refine_goal["usedConstants"]
+    assert refine_goal["usedFVars"] == ["P"]
+    assert refine_goal["usedGoals"] == [
+        {
+            "index": 0,
+            "kind": "syntheticOpaque",
+            "new": True,
+            "pp": "case n\nP : Nat → Prop\nh : P 0\n⊢ Nat",
+        },
+        {
+            "index": 1,
+            "kind": "syntheticOpaque",
+            "new": True,
+            "pp": "case h\nP : Nat → Prop\nh : P 0\n⊢ P ?n",
+        },
+    ]
 
 
 def test_tactics_rfl_from_test_project(tactics_dataset):
@@ -369,7 +434,10 @@ def test_tactics_jsonl_output_format(tactics_jsonl_records):
         assert_position_dict(record["startPos"])
         assert_position_dict(record["endPos"])
         assert_position_dict(record["nextStartPos"])
+        assert isinstance(record["goals"], list), "goals should be a list"
         assert isinstance(record["goalsAfter"], list), "goalsAfter should be a list"
+        for goal in record["goals"]:
+            assert_goal_dict(goal, record["ppTac"])
         assert position_tuple(record["startPos"]) <= position_tuple(record["endPos"]), (
             f"Expected startPos <= endPos for tactic {record['ppTac']}, got {record['startPos']} -> {record['endPos']}"
         )
@@ -406,6 +474,33 @@ def test_tactics_jsonl_known_source_spans(tactics_jsonl_records):
     assert succ_spans == {
         ("LeanScoutTestProject.Basic", (17, 4), (17, 39), (19, 0))
     }
+
+
+def test_tactics_jsonl_used_goals_refine_fixture(tactics_jsonl_records):
+    refine_records = [
+        record for record in tactics_jsonl_records
+        if record["ppTac"] == "refine ⟨?n, ?h⟩"
+    ]
+    assert len(refine_records) == 1, "Expected refine tactic from usedGoals fixture"
+    refine = refine_records[0]
+    assert refine["goalsAfter"] == [
+        "case n\nP : Nat → Prop\nh : P 0\n⊢ Nat",
+        "case h\nP : Nat → Prop\nh : P 0\n⊢ P ?n",
+    ]
+    assert refine["goals"][0]["usedGoals"] == [
+        {
+            "new": True,
+            "index": 0,
+            "kind": "syntheticOpaque",
+            "pp": "case n\nP : Nat → Prop\nh : P 0\n⊢ Nat",
+        },
+        {
+            "new": True,
+            "index": 1,
+            "kind": "syntheticOpaque",
+            "pp": "case h\nP : Nat → Prop\nh : P 0\n⊢ P ?n",
+        },
+    ]
 
 
 def test_tactics_jsonl_has_expected_tactics(tactics_jsonl_records):
