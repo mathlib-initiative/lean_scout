@@ -66,6 +66,7 @@ def assert_used_goal_dict(used_goal: dict[str, Any], tactic: str):
     assert 'index' in used_goal, f"Used goal missing 'index' for tactic {tactic}"
     assert 'kind' in used_goal, f"Used goal missing 'kind' for tactic {tactic}"
     assert 'pp' in used_goal, f"Used goal missing 'pp' for tactic {tactic}"
+    assert 'ppTerm' in used_goal, f"Used goal missing 'ppTerm' for tactic {tactic}"
 
     assert isinstance(used_goal['new'], bool), f"Used goal 'new' should be bool for tactic {tactic}"
     assert used_goal['index'] is None or isinstance(used_goal['index'], int), (
@@ -73,16 +74,19 @@ def assert_used_goal_dict(used_goal: dict[str, Any], tactic: str):
     )
     assert isinstance(used_goal['kind'], str), f"Used goal 'kind' should be string for tactic {tactic}"
     assert isinstance(used_goal['pp'], str), f"Used goal 'pp' should be string for tactic {tactic}"
+    assert isinstance(used_goal['ppTerm'], str), f"Used goal 'ppTerm' should be string for tactic {tactic}"
 
 
 def assert_goal_dict(goal: dict[str, Any], tactic: str):
     assert 'pp' in goal, f"Goal missing 'pp' for tactic {tactic}"
+    assert 'ppTerm' in goal, f"Goal missing 'ppTerm' for tactic {tactic}"
     assert 'assigned' in goal, f"Goal missing 'assigned' for tactic {tactic}"
     assert 'usedConstants' in goal, f"Goal missing 'usedConstants' for tactic {tactic}"
     assert 'usedFVars' in goal, f"Goal missing 'usedFVars' for tactic {tactic}"
     assert 'usedGoals' in goal, f"Goal missing 'usedGoals' for tactic {tactic}"
 
     assert isinstance(goal['pp'], str), f"Goal 'pp' should be string for tactic {tactic}"
+    assert isinstance(goal['ppTerm'], str), f"Goal 'ppTerm' should be string for tactic {tactic}"
     assert isinstance(goal['assigned'], bool), f"Goal 'assigned' should be bool for tactic {tactic}"
     assert isinstance(goal['usedConstants'], list), f"Goal 'usedConstants' should be list for tactic {tactic}"
     assert isinstance(goal['usedFVars'], list), f"Goal 'usedFVars' should be list for tactic {tactic}"
@@ -329,6 +333,7 @@ def test_tactics_goals_after_and_dependency_fields(tactics_dataset):
     ]
 
     constructor_goal = constructor["goals"][0]
+    assert constructor_goal["ppTerm"] == "⟨?left, ?right⟩"
     assert constructor_goal["assigned"] is True
     assert "And.intro" in constructor_goal["usedConstants"]
     assert constructor_goal["usedFVars"] == ["p"]
@@ -338,12 +343,14 @@ def test_tactics_goals_after_and_dependency_fields(tactics_dataset):
             "kind": "natural",
             "new": True,
             "pp": "case left\np : Prop\nhp : p\n⊢ p",
+            "ppTerm": "?left",
         },
         {
             "index": 1,
             "kind": "natural",
             "new": True,
             "pp": "case right\np : Prop\nhp : p\n⊢ p",
+            "ppTerm": "?right",
         },
     ]
 
@@ -358,6 +365,7 @@ def test_tactics_used_goals_refine_fixture(tactics_dataset):
     ]
 
     refine_goal = refine["goals"][0]
+    assert refine_goal["ppTerm"] == "Exists.intro ?n ?h"
     assert refine_goal["assigned"] is True
     assert "Exists.intro" in refine_goal["usedConstants"]
     assert refine_goal["usedFVars"] == ["P"]
@@ -367,12 +375,14 @@ def test_tactics_used_goals_refine_fixture(tactics_dataset):
             "kind": "syntheticOpaque",
             "new": True,
             "pp": "case n\nP : Nat → Prop\nh : P 0\n⊢ Nat",
+            "ppTerm": "?n",
         },
         {
             "index": 1,
             "kind": "syntheticOpaque",
             "new": True,
             "pp": "case h\nP : Nat → Prop\nh : P 0\n⊢ P ?n",
+            "ppTerm": "?h",
         },
     ]
 
@@ -493,12 +503,14 @@ def test_tactics_jsonl_used_goals_refine_fixture(tactics_jsonl_records):
             "index": 0,
             "kind": "syntheticOpaque",
             "pp": "case n\nP : Nat → Prop\nh : P 0\n⊢ Nat",
+            "ppTerm": "?n",
         },
         {
             "new": True,
             "index": 1,
             "kind": "syntheticOpaque",
             "pp": "case h\nP : Nat → Prop\nh : P 0\n⊢ P ?n",
+            "ppTerm": "?h",
         },
     ]
 
