@@ -115,9 +115,10 @@ public unsafe def tactics : DataExtractor where
         let ctxBefore : Elab.ContextInfo := { ctxInfo with mctx := info.mctxBefore }
         let ctxAfter : Elab.ContextInfo := { ctxInfo with mctx := info.mctxAfter }
         let goals : List Json ← info.goalsBefore.mapM fun mvarId => do
-          let pp ← ctxBefore.runMetaM' {} do Meta.ppGoal mvarId
+          let (pp, ppTerm) ← ctxBefore.runMetaM' {} do
+            return (← Meta.ppGoal mvarId, ← ppExpr (.mvar mvarId))
           let mvarDeclBefore := info.mctxBefore.getDecl mvarId
-          let (assigned, consts, fvars, usedGoals, ppTerm) ← ctxAfter.runMetaM' {} do
+          let (assigned, consts, fvars, usedGoals) ← ctxAfter.runMetaM' {} do
             -- Use earlier context in case there was in-place modification of the local context
             withLCtx mvarDeclBefore.lctx mvarDeclBefore.localInstances do
               -- sufficient; user-facing goals will not be delayed-assigned
@@ -144,7 +145,7 @@ public unsafe def tactics : DataExtractor where
                     ppTerm : $(toString <|← ppExpr (.mvar mvarId))
                   }
                 pure (usedGoals, consts)
-              return (assigned, consts, fvars, usedGoals, ← ppExpr (.mvar mvarId))
+              return (assigned, consts, fvars, usedGoals)
           return json% {
             pp : $(toString pp),
             ppTerm : $(toString ppTerm),
