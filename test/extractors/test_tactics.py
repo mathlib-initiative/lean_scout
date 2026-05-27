@@ -136,16 +136,20 @@ def test_tactics_dataset_record_schema(tactics_dataset):
     assert 'module' in first_record
     assert 'startPos' in first_record
     assert 'endPos' in first_record
+    assert 'nextStartPos' in first_record
     assert 'ppTac' in first_record
     assert 'goals' in first_record
+    assert 'goalsAfter' in first_record
     assert 'elaborator' in first_record
     assert 'kind' in first_record
 
     assert first_record['module'] is None or isinstance(first_record['module'], str)
     assert_position_dict(first_record['startPos'])
     assert_position_dict(first_record['endPos'])
+    assert_position_dict(first_record['nextStartPos'])
     assert isinstance(first_record['ppTac'], str)
     assert isinstance(first_record['goals'], list)
+    assert isinstance(first_record['goalsAfter'], list)
     assert isinstance(first_record['elaborator'], str)
     assert isinstance(first_record['kind'], str)
 
@@ -205,13 +209,22 @@ def test_tactics_parallel_extraction():
 
 def test_tactics_goal_structure(tactics_dataset):
     for record in tactics_dataset:
+        assert 'goalsAfter' in record, f"Tactic missing 'goalsAfter' for tactic {record['ppTac']}"
+        assert isinstance(record['goalsAfter'], list), f"goalsAfter should be list for tactic {record['ppTac']}"
+        for goal_after in record['goalsAfter']:
+            assert isinstance(goal_after, str), f"goalsAfter entries should be strings for tactic {record['ppTac']}"
+
         if len(record['goals']) > 0:
             for goal in record['goals']:
                 assert 'pp' in goal, f"Goal missing 'pp' for tactic {record['ppTac']}"
+                assert 'assigned' in goal, f"Goal missing 'assigned' for tactic {record['ppTac']}"
                 assert 'usedConstants' in goal, f"Goal missing 'usedConstants' for tactic {record['ppTac']}"
+                assert 'usedFVars' in goal, f"Goal missing 'usedFVars' for tactic {record['ppTac']}"
 
                 assert isinstance(goal['pp'], str), f"Goal 'pp' should be string for tactic {record['ppTac']}"
+                assert isinstance(goal['assigned'], bool), f"Goal 'assigned' should be bool for tactic {record['ppTac']}"
                 assert isinstance(goal['usedConstants'], list), f"Goal 'usedConstants' should be list for tactic {record['ppTac']}"
+                assert isinstance(goal['usedFVars'], list), f"Goal 'usedFVars' should be list for tactic {record['ppTac']}"
 
 
 def test_tactics_elaborator_field(tactics_dataset):
@@ -229,8 +242,12 @@ def test_tactics_location_fields(tactics_dataset):
 
         assert_position_dict(record['startPos'])
         assert_position_dict(record['endPos'])
+        assert_position_dict(record['nextStartPos'])
         assert position_tuple(record['startPos']) <= position_tuple(record['endPos']), (
             f"Expected startPos <= endPos for tactic {record['ppTac']}, got {record['startPos']} -> {record['endPos']}"
+        )
+        assert position_tuple(record['endPos']) <= position_tuple(record['nextStartPos']), (
+            f"Expected endPos <= nextStartPos for tactic {record['ppTac']}, got {record['endPos']} -> {record['nextStartPos']}"
         )
 
 
@@ -242,11 +259,12 @@ def test_tactics_known_source_spans(tactics_dataset):
             record['module'],
             (record['startPos']['line'], record['startPos']['column']),
             (record['endPos']['line'], record['endPos']['column']),
+            (record['nextStartPos']['line'], record['nextStartPos']['column']),
         )
         for record in zero_add_rw
     }
     assert zero_add_spans == {
-        ('LeanScoutTestProject.Basic', (7, 2), (7, 19))
+        ('LeanScoutTestProject.Basic', (7, 2), (7, 19), (9, 0))
     }
 
     succ_rw = get_records_by_tactic(tactics_dataset, 'rw [Nat.succ_add, Nat.add_succ, ih]')
@@ -256,12 +274,42 @@ def test_tactics_known_source_spans(tactics_dataset):
             record['module'],
             (record['startPos']['line'], record['startPos']['column']),
             (record['endPos']['line'], record['endPos']['column']),
+            (record['nextStartPos']['line'], record['nextStartPos']['column']),
         )
         for record in succ_rw
     }
     assert succ_spans == {
-        ('LeanScoutTestProject.Basic', (17, 4), (17, 39))
+        ('LeanScoutTestProject.Basic', (17, 4), (17, 39), (19, 0))
     }
+
+
+def test_tactics_goals_after_and_dependency_fields(tactics_dataset):
+    intro_records = [
+        record for record in get_records_by_tactic(tactics_dataset, "intro hp")
+        if record["kind"] == "Lean.Parser.Tactic.intro"
+    ]
+    assert len(intro_records) > 0, "Expected intro tactic from goalsAfter fixture"
+    intro = intro_records[0]
+    assert position_tuple(intro["nextStartPos"]) == (21, 2)
+    assert intro["goalsAfter"] == ["p : Prop\nhp : p\n⊢ p ∧ p"]
+
+    intro_goal = intro["goals"][0]
+    assert intro_goal["assigned"] is True
+    assert intro_goal["usedFVars"] == ["p"]
+
+    constructor_records = get_records_by_tactic(tactics_dataset, "constructor")
+    assert len(constructor_records) == 1, "Expected constructor tactic from goalsAfter fixture"
+    constructor = constructor_records[0]
+    assert position_tuple(constructor["nextStartPos"]) == (22, 2)
+    assert constructor["goalsAfter"] == [
+        "case left\np : Prop\nhp : p\n⊢ p",
+        "case right\np : Prop\nhp : p\n⊢ p",
+    ]
+
+    constructor_goal = constructor["goals"][0]
+    assert constructor_goal["assigned"] is True
+    assert "And.intro" in constructor_goal["usedConstants"]
+    assert constructor_goal["usedFVars"] == ["p"]
 
 
 def test_tactics_rfl_from_test_project(tactics_dataset):
@@ -311,15 +359,22 @@ def test_tactics_jsonl_output_format(tactics_jsonl_records):
         assert "module" in record, "Tactic record should have 'module' field"
         assert "startPos" in record, "Tactic record should have 'startPos' field"
         assert "endPos" in record, "Tactic record should have 'endPos' field"
+        assert "nextStartPos" in record, "Tactic record should have 'nextStartPos' field"
         assert "ppTac" in record, "Tactic record should have 'ppTac' field"
         assert "goals" in record, "Tactic record should have 'goals' field"
+        assert "goalsAfter" in record, "Tactic record should have 'goalsAfter' field"
         assert "kind" in record, "Tactic record should have 'kind' field"
         assert isinstance(record["module"], str), "Library extraction should populate module"
         assert len(record["module"]) > 0, "Module should not be empty"
         assert_position_dict(record["startPos"])
         assert_position_dict(record["endPos"])
+        assert_position_dict(record["nextStartPos"])
+        assert isinstance(record["goalsAfter"], list), "goalsAfter should be a list"
         assert position_tuple(record["startPos"]) <= position_tuple(record["endPos"]), (
             f"Expected startPos <= endPos for tactic {record['ppTac']}, got {record['startPos']} -> {record['endPos']}"
+        )
+        assert position_tuple(record["endPos"]) <= position_tuple(record["nextStartPos"]), (
+            f"Expected endPos <= nextStartPos for tactic {record['ppTac']}, got {record['endPos']} -> {record['nextStartPos']}"
         )
 
 
@@ -329,12 +384,13 @@ def test_tactics_jsonl_known_source_spans(tactics_jsonl_records):
             record["module"],
             (record["startPos"]["line"], record["startPos"]["column"]),
             (record["endPos"]["line"], record["endPos"]["column"]),
+            (record["nextStartPos"]["line"], record["nextStartPos"]["column"]),
         )
         for record in tactics_jsonl_records
         if record["ppTac"] == "rw [Nat.zero_add]"
     }
     assert zero_add_spans == {
-        ("LeanScoutTestProject.Basic", (7, 2), (7, 19))
+        ("LeanScoutTestProject.Basic", (7, 2), (7, 19), (9, 0))
     }
 
     succ_spans = {
@@ -342,12 +398,13 @@ def test_tactics_jsonl_known_source_spans(tactics_jsonl_records):
             record["module"],
             (record["startPos"]["line"], record["startPos"]["column"]),
             (record["endPos"]["line"], record["endPos"]["column"]),
+            (record["nextStartPos"]["line"], record["nextStartPos"]["column"]),
         )
         for record in tactics_jsonl_records
         if record["ppTac"] == "rw [Nat.succ_add, Nat.add_succ, ih]"
     }
     assert succ_spans == {
-        ("LeanScoutTestProject.Basic", (17, 4), (17, 39))
+        ("LeanScoutTestProject.Basic", (17, 4), (17, 39), (19, 0))
     }
 
 

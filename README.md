@@ -259,7 +259,7 @@ filtered = dataset.filter(lambda x: x["allowCompletion"])
 ```
 
 ### `tactics`
-Extracts tactic invocations with goal states, used constants, elaborator info, syntax kinds, and source locations.
+Extracts tactic invocations with before/after goal states, used constants, used free variables, elaborator info, syntax kinds, and source locations.
 
 **Supported modes**: `--read`, `--library`
 
@@ -276,9 +276,15 @@ lake run scout --command tactics --parquet --parallel 4 --library LeanScoutTest
 - `endPos` (struct): End position of the tactic syntax in the source file
   - `line` (nat): 1-based line number
   - `column` (nat): 0-based column number
+- `nextStartPos` (struct): Position after the tactic's trailing whitespace; this is the start position of the next syntax in the source file, if any, or the end of the file
+  - `line` (nat): 1-based line number
+  - `column` (nat): 0-based column number
 - `goals` (list): List of goal states before the tactic
   - `pp` (string): Pretty-printed goal
-  - `usedConstants` (list of strings): Constants referenced in the goal
+  - `assigned` (bool): Whether the original goal metavariable is assigned after elaborating the tactic
+  - `usedConstants` (list of strings): Constants referenced in the instantiated goal
+  - `usedFVars` (list of strings): Free variables referenced in the instantiated goal, using the same sanitized names as the pretty-printed goal
+- `goalsAfter` (list of strings): Pretty-printed goal states after the tactic
 - `ppTac` (string): Pretty-printed tactic syntax
 - `elaborator` (string): Name of the elaborator that produced this tactic
 - `kind` (string): Syntax node kind for the tactic
