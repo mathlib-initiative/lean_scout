@@ -21,3 +21,8 @@ theorem tactic_goals_after_fixture (p : Prop) : p → p ∧ p := by
   constructor
   · exact hp
   · exact hp
+
+theorem tactic_used_goals_fixture (P : Nat → Prop) (h : P 0) : ∃ n, P n := by
+  refine ⟨?n, ?h⟩
+  · exact 0
+  · exact h
