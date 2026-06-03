@@ -1,7 +1,7 @@
 description: "Test types extractor on LeanScoutTestProject when used as dependency"
 source: "LeanScoutTestProject"
 
-# Exact matches: verify complete record equality for theorems in test project
+# Exact matches: verify selected stable fields for theorems in test project
 exact_matches:
   - name: "add_zero"
     module: "LeanScoutTestProject.Basic"
@@ -43,6 +43,18 @@ property_checks:
       type_contains: "Nat"
       module_not_null: true
       allowCompletion: true
+
+  - name: "documentedNat"
+    properties:
+      module_contains: "LeanScoutTestProject"
+      type_contains: "Nat"
+      docString_contains: "Documented declaration used to test docstring extraction"
+      module_not_null: true
+      allowCompletion: true
+
+  - name: "zero_add"
+    properties:
+      docString: null
 
   - name: "list_nil_append"
     properties:

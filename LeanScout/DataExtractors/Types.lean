@@ -14,6 +14,7 @@ public unsafe def types : DataExtractor where
     { name := "name", nullable := false, type := .string },
     { name := "module", nullable := true, type := .string },
     { name := "type", nullable := false, type := .string },
+    { name := "docString", nullable := true, type := .string },
     { name := "allowCompletion", nullable := false, type := .bool },
   ]
   key := "name"
@@ -27,10 +28,12 @@ public unsafe def types : DataExtractor where
         | some idx => env.header.moduleNames[idx]!
         | none => if env.constants.map₂.contains n then env.header.mainModule else none
       let allowCompletion := Lean.Meta.allowCompletion env n
+      let docString ← Lean.findDocString? env n
       sink <| json% {
         name : $(n),
         module : $(mod),
         type : $(s!"{← Meta.ppExpr c.type}"),
+        docString : $(docString),
         allowCompletion : $(allowCompletion)
       }
   | _ => throw <| IO.userError "Unsupported Target"

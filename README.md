@@ -235,7 +235,7 @@ lake run scout --command types --parquet --numShards 32 --imports Lean
 We provide three built-in data extractors: `types`, `tactics`, and `const_dep`.
 
 ### `types`
-Extracts constant declarations with their types and modules.
+Extracts constant declarations with their types, modules, and docstrings.
 
 **Supported modes**: `--imports` only
 
@@ -248,6 +248,7 @@ lake run scout --command types --parquet --imports Lean
 - `name` (string): Constant name
 - `module` (string, nullable): Module containing the constant
 - `type` (string): Type signature
+- `docString` (string, nullable): Declaration docstring, if one exists
 - `allowCompletion` (bool): Whether `Lean.Meta.allowCompletion` holds for the constant
 
 **Configuration**:

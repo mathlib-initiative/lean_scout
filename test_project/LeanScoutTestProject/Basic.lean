@@ -26,3 +26,6 @@ theorem tactic_used_goals_fixture (P : Nat → Prop) (h : P 0) : ∃ n, P n := b
   refine ⟨?n, ?h⟩
   · exact 0
   · exact h
+
+/-- Documented declaration used to test docstring extraction. -/
+def documentedNat : Nat := 0
