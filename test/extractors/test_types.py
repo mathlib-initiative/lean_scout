@@ -95,6 +95,15 @@ def test_types_imports_properties(types_dataset_imports, types_spec):
         if 'type_contains' in props:
             assert_record_contains(actual, 'type', props['type_contains'])
 
+        if 'docString_contains' in props:
+            assert_record_contains(actual, 'docString', props['docString_contains'])
+
+        if 'docString' in props:
+            assert actual['docString'] == props['docString'], (
+                f"docString mismatch for {name}: "
+                f"expected {props['docString']}, got {actual['docString']}"
+            )
+
         if props.get('module_not_null'):
             assert_record_not_null(actual, 'module')
 
@@ -134,11 +143,13 @@ def test_types_imports_schema(types_dataset_imports):
     assert 'name' in first_record
     assert 'module' in first_record
     assert 'type' in first_record
+    assert 'docString' in first_record
     assert 'allowCompletion' in first_record
 
     assert isinstance(first_record['name'], str)
     assert first_record['module'] is None or isinstance(first_record['module'], str)
     assert isinstance(first_record['type'], str)
+    assert first_record['docString'] is None or isinstance(first_record['docString'], str)
     assert isinstance(first_record['allowCompletion'], bool)
 
 
@@ -191,9 +202,11 @@ def test_types_jsonl_output_format(types_jsonl_records):
     for record in types_jsonl_records:
         assert "name" in record, "Record should have 'name' field"
         assert "type" in record, "Record should have 'type' field"
+        assert "docString" in record, "Record should have 'docString' field"
         assert "allowCompletion" in record, "Record should have 'allowCompletion' field"
         assert isinstance(record["name"], str)
         assert isinstance(record["type"], str)
+        assert record["docString"] is None or isinstance(record["docString"], str)
         assert isinstance(record["allowCompletion"], bool)
 
 
@@ -214,6 +227,10 @@ def test_types_jsonl_record_content(types_jsonl_records):
     assert add_zero["module"] == "LeanScoutTestProject.Basic"
     assert "Nat" in add_zero["type"]
     assert add_zero["allowCompletion"] is True
+
+    documented_nat = next((r for r in types_jsonl_records if r["name"] == "documentedNat"), None)
+    assert documented_nat is not None, "Should find documentedNat record"
+    assert "Documented declaration used to test docstring extraction" in documented_nat["docString"]
 
 
 def test_types_known_non_completion_record(types_dataset_imports):
