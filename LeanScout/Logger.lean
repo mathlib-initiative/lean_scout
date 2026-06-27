@@ -6,7 +6,8 @@ namespace LeanScout
 
 public def logger : Logger where
   log s msg := do
-    let t ← Std.Time.DateTime.now (tz := Std.Time.TimeZone.GMT)
+    let tm ← Std.Time.Timestamp.now
+    let t := Std.Time.DateTime.ofTimestampWithZone tm Std.Time.TimeZone.GMT
     let stderr ← IO.getStderr
     stderr.putStrLn s!"{t} [{s}] {msg}"
     stderr.flush
