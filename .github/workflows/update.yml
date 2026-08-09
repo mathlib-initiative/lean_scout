@@ -26,10 +26,16 @@ jobs:
         id: before
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Select next Lean release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run python .github/scripts/select-next-toolchain.py
+
       - name: Update Lean project
         id: lean-update
         uses: leanprover-community/lean-update@5010048b67406bb7481dee769a4dcd1f7e560393
         with:
+          update_lean_toolchain: never
           update_if_modified: lean-toolchain
           on_update_succeeds: commit
           on_update_fails: issue
@@ -39,3 +45,9 @@ jobs:
         env:
           BEFORE_SHA: ${{ steps.before.outputs.sha }}
         run: bash .github/scripts/tag-toolchain.sh
+
+      - name: Fail when the toolchain update fails validation
+        if: steps.lean-update.outputs.result == 'update-fail'
+        run: |
+          echo "The next Lean release failed validation." >&2
+          exit 1
