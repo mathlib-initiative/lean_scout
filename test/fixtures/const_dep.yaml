@@ -49,7 +49,7 @@ property_checks:
 
   - name: "OfScientific.ctorIdx"
     properties:
-      module: "Init.Data.OfScientific"
+      module_contains: "Init.Data.OfScientific"
       module_not_null: true
       allowCompletion: false
 
