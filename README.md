@@ -9,6 +9,15 @@ To use this tool, you must have:
 - Python 3.13+.
 - The `uv` Python package manager.
 
+For development, the checked-in Nix flake provides these tools plus Git and the
+GitHub CLI:
+
+```bash
+nix develop
+uv sync --frozen
+./run_tests
+```
+
 ## Quickstart
 
 Add Lean Scout as a dependency in your project.
