@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -39,6 +40,14 @@ class LeanVersion:
         return (self.major, self.minor, self.patch, is_stable, rc_number)
 
 
+@dataclass(frozen=True)
+class LeanRelease:
+    """A Lean release and the time GitHub published it."""
+
+    tag: str
+    published_at: datetime
+
+
 def parse_lean_version(tag: str) -> LeanVersion | None:
     """Parse a Lean stable or RC release tag, ignoring other tag formats."""
     match = VERSION_PATTERN.fullmatch(tag)
@@ -55,28 +64,41 @@ def parse_lean_version(tag: str) -> LeanVersion | None:
     )
 
 
-def select_next_version(current_tag: str, release_tags: Iterable[str]) -> str | None:
-    """Select the smallest published Lean version newer than ``current_tag``."""
+def select_next_version(current_tag: str, releases: Iterable[LeanRelease]) -> str | None:
+    """Select the first Lean release published after ``current_tag``."""
     current = parse_lean_version(current_tag)
     if current is None:
         raise ValueError(f"unsupported current Lean version: {current_tag}")
 
-    versions = {
-        version.tag: version
-        for tag in release_tags
-        if (version := parse_lean_version(tag)) is not None
-    }
-    newer_versions = [
-        version for version in versions.values() if version.ordering_key > current.ordering_key
+    parsed_releases = [
+        (release, version)
+        for release in releases
+        if (version := parse_lean_version(release.tag)) is not None
     ]
-    if not newer_versions:
+    current_releases = [
+        release for release, version in parsed_releases if version.tag == current.tag
+    ]
+    if not current_releases:
+        raise ValueError(f"current Lean release not found: {current_tag}")
+
+    current_published_at = max(release.published_at for release in current_releases)
+    later_releases = [
+        (release, version)
+        for release, version in parsed_releases
+        if release.published_at > current_published_at
+    ]
+    if not later_releases:
         return None
 
-    return min(newer_versions, key=lambda version: version.ordering_key).tag
+    _, next_version = min(
+        later_releases,
+        key=lambda item: (item[0].published_at, item[1].ordering_key),
+    )
+    return next_version.tag
 
 
-def fetch_release_tags() -> list[str]:
-    """Fetch all published Lean release tags through the GitHub CLI."""
+def fetch_releases() -> list[LeanRelease]:
+    """Fetch published Lean releases and timestamps through the GitHub CLI."""
     result = subprocess.run(
         [
             "gh",
@@ -84,16 +106,25 @@ def fetch_release_tags() -> list[str]:
             "--paginate",
             LEAN_RELEASES_ENDPOINT,
             "--jq",
-            ".[] | select(.draft == false) | .tag_name",
+            '.[] | select(.draft == false) | [.published_at, .tag_name] | @tsv',
         ],
         check=True,
         stdout=subprocess.PIPE,
         text=True,
     )
-    return result.stdout.splitlines()
+    releases = []
+    for line in result.stdout.splitlines():
+        published_at, tag = line.split("\t", maxsplit=1)
+        releases.append(
+            LeanRelease(
+                tag=tag,
+                published_at=datetime.fromisoformat(published_at.replace("Z", "+00:00")),
+            )
+        )
+    return releases
 
 
-def advance_toolchain(toolchain_path: Path, release_tags: Iterable[str]) -> str | None:
+def advance_toolchain(toolchain_path: Path, releases: Iterable[LeanRelease]) -> str | None:
     """Advance ``toolchain_path`` by one release and return the selected tag."""
     contents = toolchain_path.read_text(encoding="utf-8")
     toolchain = contents.strip()
@@ -101,7 +132,7 @@ def advance_toolchain(toolchain_path: Path, release_tags: Iterable[str]) -> str 
         raise ValueError(f"unexpected lean-toolchain contents: {toolchain}")
 
     current_tag = toolchain.removeprefix(TOOLCHAIN_PREFIX)
-    next_tag = select_next_version(current_tag, release_tags)
+    next_tag = select_next_version(current_tag, releases)
     if next_tag is None:
         return None
 
@@ -114,7 +145,7 @@ def main() -> int:
     """Advance the repository toolchain by exactly one published release."""
     toolchain_path = Path("lean-toolchain")
     current = toolchain_path.read_text(encoding="utf-8").strip()
-    next_tag = advance_toolchain(toolchain_path, fetch_release_tags())
+    next_tag = advance_toolchain(toolchain_path, fetch_releases())
     if next_tag is None:
         print(f"{current} is already at the newest published Lean release.")
     else:
