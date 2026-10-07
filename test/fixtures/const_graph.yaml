@@ -1,0 +1,47 @@
+description: "Test const_graph extractor on LeanScoutTestProject when used as dependency"
+source: "LeanScoutTestProject"
+
+# Property checks: verify graph structure for specific constants
+# Note: const_graph extractor only outputs 'name' and 'graph' fields (no module)
+property_checks:
+  - name: "add_zero"
+    properties:
+      graph_has_nodes: true
+      graph_has_root: true
+
+  - name: "zero_add"
+    properties:
+      graph_has_nodes: true
+      graph_has_root: true
+
+  - name: "add_comm"
+    properties:
+      graph_has_nodes: true
+      graph_has_root: true
+      # add_comm has a more complex type with induction, should have more nodes
+      min_nodes: 3
+
+  - name: "list_nil_append"
+    properties:
+      graph_has_nodes: true
+      graph_has_root: true
+
+  - name: "list_map_nil"
+    properties:
+      graph_has_nodes: true
+      graph_has_root: true
+
+# Count checks: verify dataset statistics
+count_checks:
+  min_records: 8  # At least the 8 theorems we defined
+
+  # Ensure all our theorems exist
+  has_names:
+    - "add_zero"
+    - "zero_add"
+    - "succ_eq_add_one"
+    - "add_comm"
+    - "list_nil_append"
+    - "list_cons_append"
+    - "list_length_nil"
+    - "list_map_nil"
