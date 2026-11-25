@@ -34,8 +34,8 @@ private partial def collectMVarsAndUsedConstants (e : Expr) (consts : NameSet) :
 /-- Gets the unassigned metavariables in `e` after following delayed assignments, as well as the
 constants encountered along the way. Does not include the intermediate delayed-assigned mvars. -/
 private def getMVarsAndConstantsNoDelayed (e : Expr) : MetaM (Array MVarId × NameSet) := do
-  let (consts, { result .. }) ← collectMVarsAndUsedConstants e {} |>.run {}
-  let result ← result.filterM (notM ·.isDelayedAssigned)
+  let (consts, s) ← collectMVarsAndUsedConstants e {} |>.run {}
+  let result ← s.result.filterM (notM ·.isDelayedAssigned)
   return (result, consts)
 
 private def getModuleName? (ctxInfo : Lean.Elab.ContextInfo) : Option String :=
@@ -124,7 +124,8 @@ public unsafe def tactics : DataExtractor where
               -- sufficient; user-facing goals will not be delayed-assigned
               let assigned ← mvarId.isAssigned
               let t ← instantiateMVars <| .mvar mvarId
-              let (_, { fvarIds .. }) ← t.collectFVars.run {}
+              let (_, s) ← t.collectFVars.run {}
+              let fvarIds := s.fvarIds
               -- Sanitize the names so their string representations are the same as in `ppGoal`.
               let fvars ← if fvarIds.isEmpty then pure #[] else
                 let sanitizedLCtx := (← getLCtx).sanitizeNames.run' { options := (← getOptions) }
